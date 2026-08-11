@@ -1,0 +1,54 @@
+# manifold-apps — guide for AI coding assistants
+
+Two SwiftUI apps sharing one repo: **Manifold** (iOS 18+, consumer chat) and
+**ManifoldStudio** (macOS 15+, pro showcase). Both consume ManifoldKit by
+published tag (`https://github.com/ManifoldKit/ManifoldKit`, pinned
+`upToNextMinor` from a released version — see `project.yml`). Core
+ManifoldKit conventions (bootstrap recipe, sending messages, theming, tool
+calling, concurrency rules) live in ManifoldKit's own `AGENTS.md` — this file
+covers only what's specific to manifold-apps.
+
+## Layout
+
+- `Mobile/` — the `Manifold` iOS app target (`ManifoldApp.swift`).
+- `Studio/` — the `ManifoldStudio` macOS app target (`ManifoldStudioApp.swift`).
+- `Shared/` — code shared by both targets (empty as of the scaffold PR; a
+  composition root and shared Features land here in a follow-up PR).
+- `project.yml` — XcodeGen spec. The generated `Manifold.xcodeproj` is
+  **gitignored** (basechat precedent) — regenerate with `make generate`
+  whenever `project.yml`, target sources, or dependencies change.
+
+## Build & test
+
+```bash
+make generate   # xcodegen generate
+make build      # builds both schemes (iOS Simulator + macOS), CODE_SIGNING_ALLOWED=NO
+make test       # runs the Manifold (iOS) scheme's tests on Simulator
+make clean      # removes the generated project + build artifacts
+```
+
+No `-derivedDataPath` flag — default DerivedData lives outside the repo
+deliberately; pointing it in-repo causes a package-resolution wedge (see
+ManifoldKit's `scripts/clean-build.sh` history, #2475).
+
+## Constraints specific to this repo
+
+- **Published-tag pins only, floating within `upToNextMinor`.** No
+  `.package(path:)`, no local package symlink, no branch/main pin. The
+  generated project is gitignored, so there is no `Package.resolved` to lock
+  either — pins float on purpose; if you need an unreleased ManifoldKit API,
+  report the gap rather than repointing at a branch.
+- **Draft PRs show a red `test` / `macos` check by design.** The shared
+  `swift-ci.yml` workflow (ManifoldKit/.github) fails drafts fast (a skipped
+  required check otherwise counts as passing branch protection — the hazard
+  that let manifold-llama#153 merge unverified). Not a bug; mark the PR
+  ready to get a real verdict.
+- **Never point DerivedData inside this repo.** A local package checkout
+  (there is none here) plus an in-repo DerivedData path is what produces the
+  "Resolve Package Graph" infinite loop documented across the ManifoldKit
+  estate — `make build`/`make test` deliberately omit `-derivedDataPath` for
+  this reason.
+- **Generated project is not committed.** `Manifold.xcodeproj/`,
+  `DerivedData/`, `.build/`, and `Package.resolved` are all gitignored —
+  regenerate locally with `make generate` after any `project.yml` change; CI
+  regenerates it fresh on every run.
