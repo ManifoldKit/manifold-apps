@@ -113,9 +113,19 @@ final class AppEnvironment {
         if let restored = await sessionManager.selectInitialSession() {
             sessionManager.activeSession = restored
             await viewModel.switchToSession(restored)
-        } else if let fresh = try? await sessionManager.createSession() {
-            sessionManager.activeSession = fresh
-            await viewModel.switchToSession(fresh)
+        } else {
+            // do/catch + Log — not `try?` — so a session-creation failure is
+            // visible instead of silently leaving the app with no active
+            // session (core's own AGENTS.md bootstrap recipe uses `try?`
+            // here too; that's a known flaw in the recipe, not a pattern to
+            // inherit — see Principle 6, "Errors are visible").
+            do {
+                let fresh = try await sessionManager.createSession()
+                sessionManager.activeSession = fresh
+                await viewModel.switchToSession(fresh)
+            } catch {
+                Log.persistence.error("Failed to create the initial session: \(String(describing: error), privacy: .public)")
+            }
         }
 
         if !isUITesting {

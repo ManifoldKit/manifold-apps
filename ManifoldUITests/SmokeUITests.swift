@@ -46,11 +46,23 @@ final class SmokeUITests: XCTestCase {
     func testSendMessageFlow() throws {
         openChatDetailIfNeeded(app: app)
 
+        // Unlike core's original (a live demo that can genuinely have no
+        // model loaded), this app's contract is that AppEnvironment's
+        // --uitesting path always has the composer enabled by the time
+        // bootstrap finishes (ScriptedBackend's fixed-backend
+        // InferenceService marks the model loaded immediately — see
+        // AppEnvironment.swift). So an unavailable input here is a real
+        // regression in that wiring, not an expected "no model" state —
+        // fail hard instead of skipping gracefully.
+        XCTAssertTrue(
+            waitForChatInputReady(app: app, timeout: 30),
+            "Chat input should be enabled under --uitesting — ScriptedBackend's fixed-backend InferenceService marks the model loaded immediately, so a disabled input here means that wiring is broken, not that no model is loaded"
+        )
+
         let input = findMessageInput(app: app)
-        guard let input, input.isEnabled else {
-            captureScreenshot(name: "Send-Flow-Input-Unavailable")
-            // Input is disabled (no model loaded) — skip gracefully, same as
-            // core's original.
+        guard let input else {
+            captureScreenshot(name: "Send-Flow-No-Input")
+            XCTFail("Message input not found even though waitForChatInputReady succeeded")
             return
         }
 
@@ -58,10 +70,7 @@ final class SmokeUITests: XCTestCase {
         input.typeText("Hello from UI test")
 
         let sendButton = app.buttons["Send message"]
-        guard waitForElement(sendButton, timeout: 3), sendButton.isEnabled else {
-            captureScreenshot(name: "Send-Flow-Button-Disabled")
-            return
-        }
+        XCTAssertTrue(waitForElement(sendButton, timeout: 3) && sendButton.isEnabled, "Send button should be enabled once the input has text")
 
         sendButton.tap()
 
