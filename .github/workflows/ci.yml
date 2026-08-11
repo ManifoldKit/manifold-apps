@@ -18,10 +18,7 @@ jobs:
       project: Manifold.xcodeproj
       scheme: Manifold
       destination: "platform=iOS Simulator,name=iPhone 16"
-      # false until the ManifoldUITests target exists (PR2 flips this to true in
-      # the same commit that adds it) — `xcodebuild test` errors on a scheme
-      # with no test action configured.
-      run-tests: false
+      run-tests: true
 
   macos:
     uses: ManifoldKit/.github/.github/workflows/swift-ci.yml@main

@@ -29,6 +29,8 @@ targets:
         product: ManifoldKit
       - package: ManifoldKit
         product: ManifoldTools
+      - package: ManifoldKit
+        product: ManifoldUIModelManagement
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.manifoldkit.Manifold
@@ -57,6 +59,8 @@ targets:
         product: ManifoldKit
       - package: ManifoldKit
         product: ManifoldTools
+      - package: ManifoldKit
+        product: ManifoldUIModelManagement
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.manifoldkit.ManifoldStudio
@@ -74,11 +78,28 @@ targets:
           CODE_SIGN_STYLE: Manual
           CODE_SIGN_IDENTITY: "-"
 
+  ManifoldUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - ManifoldUITests
+    dependencies:
+      - target: Manifold
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.manifoldkit.ManifoldUITests
+        SWIFT_VERSION: "6.0"
+        GENERATE_INFOPLIST_FILE: YES
+
 schemes:
   Manifold:
     build:
       targets:
         Manifold: all
+        ManifoldUITests: [test]
+    test:
+      targets:
+        - ManifoldUITests
     run:
       config: Debug
     archive:

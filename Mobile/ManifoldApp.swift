@@ -4,30 +4,26 @@ import ManifoldKit
 
 /// Manifold — the consumer chat app (iOS 18+).
 ///
-/// Night-1 scaffold: `ManifoldKit.quickStart()` wires inference, persistence,
-/// and a single-session chat surface in one call, mirroring core's
-/// `MinimalExample`. A composition root and shared Features move into
-/// `Shared/` in a follow-up PR — this file stays intentionally thin until
-/// then.
+/// Builds the shared `AppEnvironment` composition root and shows
+/// `RootView`. Under `--uitesting`, `AppEnvironment.bootstrap` swaps in a
+/// deterministic `ScriptedBackend` and an in-memory store — see
+/// `Shared/App/AppEnvironment.swift`.
 @main
 struct ManifoldApp: App {
-    @State private var result: QuickStartResult?
-    @State private var error: ManifoldKitError?
-    @State private var showModelManagement = false
+    @State private var env: AppEnvironment?
+    @State private var startupError: Error?
 
     var body: some Scene {
         WindowGroup {
-            if let result {
-                NavigationStack {
-                    ChatView(showModelManagement: $showModelManagement)
-                }
-                .environment(result.viewModel)
-                .modelContainer(result.bootstrap.modelContainer)
-            } else if let error {
+            if let env {
+                RootView()
+                    .environment(env)
+                    .modelContainer(env.bootstrap.modelContainer)
+            } else if let startupError {
                 ContentUnavailableView {
                     Label("Failed to start", systemImage: "exclamationmark.triangle")
                 } description: {
-                    Text(error.errorDescription ?? "Unknown error")
+                    Text(String(describing: startupError))
                 }
             } else {
                 ProgressView("Starting…")
@@ -39,16 +35,13 @@ struct ManifoldApp: App {
     @MainActor
     private func start() async {
         do {
-            result = try await ManifoldKit.quickStart(
-                configuration: ManifoldConfiguration(
-                    appName: "Manifold",
-                    bundleIdentifier: "com.manifoldkit.Manifold"
-                )
+            env = try await AppEnvironment.bootstrap(
+                storeName: "Manifold",
+                appName: "Manifold",
+                bundleIdentifier: "com.manifoldkit.Manifold"
             )
-        } catch let e as ManifoldKitError {
-            error = e
         } catch {
-            self.error = .from(error)
+            self.startupError = error
         }
     }
 }

@@ -12,8 +12,13 @@ covers only what's specific to manifold-apps.
 
 - `Mobile/` — the `Manifold` iOS app target (`ManifoldApp.swift`).
 - `Studio/` — the `ManifoldStudio` macOS app target (`ManifoldStudioApp.swift`).
-- `Shared/` — code shared by both targets (empty as of the scaffold PR; a
-  composition root and shared Features land here in a follow-up PR).
+- `Shared/` — code shared by both targets: `App/` (the `AppEnvironment`
+  composition root, the `AppFeature` protocol seam, `RootView`, per-platform
+  feature registries), `Features/` (one stub directory per feature — later
+  workers replace only a stub's `install(into:)`/`makeView(env:)`),
+  `Support/` (launch-argument parsing, the ported-but-not-yet-wired
+  `InboundPayload`/`PendingSharePayload` types), `DesignSystem/` (minimal
+  spacing/typography tokens).
 - `project.yml` — XcodeGen spec. The generated `Manifold.xcodeproj` is
   **gitignored** (basechat precedent) — regenerate with `make generate`
   whenever `project.yml`, target sources, or dependencies change.
@@ -23,7 +28,7 @@ covers only what's specific to manifold-apps.
 ```bash
 make generate   # xcodegen generate
 make build      # builds both schemes (iOS Simulator + macOS), CODE_SIGNING_ALLOWED=NO
-make test       # FAILS until PR2 adds ManifoldUITests (deliberate — no silent no-op gate)
+make test       # runs ManifoldUITests (4 smoke tests) against the Manifold scheme
 make clean      # removes the generated project + build artifacts
 ```
 
