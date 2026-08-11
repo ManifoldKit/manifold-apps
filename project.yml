@@ -31,6 +31,8 @@ targets:
         product: ManifoldTools
       - package: ManifoldKit
         product: ManifoldUIModelManagement
+      - package: ManifoldKit
+        product: ManifoldAppIntents
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.manifoldkit.Manifold
@@ -61,6 +63,8 @@ targets:
         product: ManifoldTools
       - package: ManifoldKit
         product: ManifoldUIModelManagement
+      - package: ManifoldKit
+        product: ManifoldAppIntents
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.manifoldkit.ManifoldStudio
