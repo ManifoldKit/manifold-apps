@@ -19,11 +19,12 @@ build: generate
 		-destination 'platform=macOS' \
 		CODE_SIGNING_ALLOWED=NO
 
-test: generate
-	xcodebuild test \
-		-project Manifold.xcodeproj \
-		-scheme Manifold \
-		-destination 'platform=iOS Simulator,name=iPhone 16'
+# Fails deliberately until PR2 lands the ManifoldUITests target and wires the
+# scheme's test action — a trivially-green `xcodebuild test` with zero
+# testables would be a gate that can't fail, which is worse than no gate.
+test:
+	@echo "error: no test target exists yet — PR2 adds ManifoldUITests and makes this real." >&2
+	@exit 1
 
 clean:
 	rm -rf Manifold.xcodeproj DerivedData .build

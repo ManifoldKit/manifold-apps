@@ -22,7 +22,7 @@ Both targets consume ManifoldKit by published tag (`upToNextMinor`, see
 brew install xcodegen   # once, if you don't already have it
 make generate            # xcodegen generate -> Manifold.xcodeproj (gitignored)
 make build                # builds both schemes (iOS Simulator + macOS)
-make test                  # runs the Manifold (iOS) scheme's tests
+make test                  # FAILS until PR2 adds ManifoldUITests (deliberate — no silent no-op gate)
 ```
 
 See `AGENTS.md` for the full set of repo-specific conventions and

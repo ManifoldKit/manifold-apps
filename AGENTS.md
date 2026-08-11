@@ -23,7 +23,7 @@ covers only what's specific to manifold-apps.
 ```bash
 make generate   # xcodegen generate
 make build      # builds both schemes (iOS Simulator + macOS), CODE_SIGNING_ALLOWED=NO
-make test       # runs the Manifold (iOS) scheme's tests on Simulator
+make test       # FAILS until PR2 adds ManifoldUITests (deliberate — no silent no-op gate)
 make clean      # removes the generated project + build artifacts
 ```
 
@@ -46,7 +46,7 @@ ManifoldKit's `scripts/clean-build.sh` history, #2475).
 - **Never point DerivedData inside this repo.** A local package checkout
   (there is none here) plus an in-repo DerivedData path is what produces the
   "Resolve Package Graph" infinite loop documented across the ManifoldKit
-  estate — `make build`/`make test` deliberately omit `-derivedDataPath` for
+  estate — `make build` deliberately omits `-derivedDataPath` for
   this reason.
 - **Generated project is not committed.** `Manifold.xcodeproj/`,
   `DerivedData/`, `.build/`, and `Package.resolved` are all gitignored —
