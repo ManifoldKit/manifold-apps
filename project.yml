@@ -1,0 +1,93 @@
+name: Manifold
+options:
+  bundleIdPrefix: com.manifoldkit
+  deploymentTarget:
+    iOS: "18.0"
+    macOS: "15.0"
+  xcodeVersion: "16.0"
+  generateEmptyDirectories: true
+
+packages:
+  # Remote, published-tag pin, floating within upToNextMinor — deliberate.
+  # The generated project (and any Package.resolved it would produce) is
+  # gitignored, so nothing locks the resolved patch/minor; if an API this
+  # repo needs isn't in a released tag yet, report the gap rather than
+  # repointing at a branch or a local path.
+  ManifoldKit:
+    url: https://github.com/ManifoldKit/ManifoldKit
+    minorVersion: 0.75.0
+
+targets:
+  Manifold:
+    type: application
+    platform: iOS
+    sources:
+      - Mobile
+      - Shared
+    dependencies:
+      - package: ManifoldKit
+        product: ManifoldKit
+      - package: ManifoldKit
+        product: ManifoldTools
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.manifoldkit.Manifold
+        MARKETING_VERSION: 0.1.0
+        CURRENT_PROJECT_VERSION: 1
+        SWIFT_VERSION: "6.0"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        # ChatView's composer shows a voice-input trigger regardless of
+        # whether ManifoldVoice is linked; without this key it fires a
+        # composer fault banner on first launch (same as core's
+        # MinimalExample).
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "Voice input transcribes your speech into the message composer."
+
+  ManifoldStudio:
+    type: application
+    platform: macOS
+    sources:
+      - Studio
+      - Shared
+    dependencies:
+      - package: ManifoldKit
+        product: ManifoldKit
+      - package: ManifoldKit
+        product: ManifoldTools
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.manifoldkit.ManifoldStudio
+        MARKETING_VERSION: 0.1.0
+        CURRENT_PROJECT_VERSION: 1
+        SWIFT_VERSION: "6.0"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "Voice input transcribes your speech into the message composer."
+      configs:
+        # Ad-hoc Debug-only signing so an unregistered Mac can build/run
+        # (ManifoldKit issue #2453 M4 recipe, commit 05d226d9). Release is
+        # untouched — this repo has no macOS Release/archive lane yet.
+        Debug:
+          DEVELOPMENT_TEAM: ""
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: "-"
+
+schemes:
+  Manifold:
+    build:
+      targets:
+        Manifold: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+  ManifoldStudio:
+    build:
+      targets:
+        ManifoldStudio: all
+    run:
+      config: Debug
+    archive:
+      config: Release

@@ -1,0 +1,33 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    uses: ManifoldKit/.github/.github/workflows/swift-ci.yml@main
+    with:
+      mode: xcodegen
+      project: Manifold.xcodeproj
+      scheme: Manifold
+      destination: "platform=iOS Simulator,name=iPhone 16"
+      # false until the ManifoldUITests target exists (PR2 flips this to true in
+      # the same commit that adds it) — `xcodebuild test` errors on a scheme
+      # with no test action configured.
+      run-tests: false
+
+  macos:
+    uses: ManifoldKit/.github/.github/workflows/swift-ci.yml@main
+    with:
+      mode: xcodegen
+      project: Manifold.xcodeproj
+      scheme: ManifoldStudio
+      destination: "platform=macOS"
+      run-tests: false

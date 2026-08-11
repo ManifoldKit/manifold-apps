@@ -1,0 +1,6 @@
+Manifold.xcodeproj/
+DerivedData/
+.build/
+Package.resolved
+prototypes/
+.DS_Store
