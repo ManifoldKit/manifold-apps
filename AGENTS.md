@@ -36,6 +36,11 @@ No `-derivedDataPath` flag — default DerivedData lives outside the repo
 deliberately; pointing it in-repo causes a package-resolution wedge (see
 ManifoldKit's `scripts/clean-build.sh` history, #2475).
 
+`IOS_DESTINATION` defaults to `iPhone 16` (matches `ci.yml`'s destination)
+but is overridable for hosts without that simulator installed (e.g. an
+iPhone-17-generation-only Mac): `make test IOS_DESTINATION='platform=iOS
+Simulator,name=iPhone 17 Pro'`.
+
 ## Constraints specific to this repo
 
 - **Published-tag pins only, floating within `upToNextMinor`.** No

@@ -1,5 +1,12 @@
 .PHONY: generate build test clean
 
+# Overridable so a host with no "iPhone 16" simulator installed (e.g. an
+# iPhone-17-generation-only Mac) can still `make build`/`make test` locally:
+#   make test IOS_DESTINATION='platform=iOS Simulator,name=iPhone 17 Pro'
+# Default stays iPhone 16 so CI behavior (ci.yml, which hardcodes the same
+# default via the reusable workflow) is unchanged.
+IOS_DESTINATION ?= platform=iOS Simulator,name=iPhone 16
+
 generate:
 	xcodegen generate
 
@@ -11,7 +18,7 @@ build: generate
 	xcodebuild build \
 		-project Manifold.xcodeproj \
 		-scheme Manifold \
-		-destination 'platform=iOS Simulator,name=iPhone 16' \
+		-destination '$(IOS_DESTINATION)' \
 		CODE_SIGNING_ALLOWED=NO
 	xcodebuild build \
 		-project Manifold.xcodeproj \
@@ -23,7 +30,7 @@ test: generate
 	xcodebuild test \
 		-project Manifold.xcodeproj \
 		-scheme Manifold \
-		-destination 'platform=iOS Simulator,name=iPhone 16'
+		-destination '$(IOS_DESTINATION)'
 
 clean:
 	rm -rf Manifold.xcodeproj DerivedData .build
