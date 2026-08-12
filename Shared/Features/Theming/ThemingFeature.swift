@@ -3,8 +3,8 @@ import SwiftUI
 /// Theme picker driving `AppEnvironment.theme` (manifold-apps W2 P6) — ports
 /// the preset-picker "worked example" from ManifoldKit's own
 /// `Example/Advanced/DemoContentView.swift` (`DemoChatTheme` + the
-/// "Appearance" toolbar menu). `RootView` already cascades `env.theme`
-/// app-wide via `.manifoldTheme(env.theme)`; this feature's job is only to
+/// "Appearance" toolbar menu). `RootView` already cascades the selected
+/// preset app-wide; this feature's job is only to
 /// present a picker that writes it. See `ThemingShowcaseView` for the view
 /// itself.
 enum ThemingFeature: AppFeature {

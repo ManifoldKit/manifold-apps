@@ -5,9 +5,11 @@ import XCTest
 /// `Example/Advanced/DemoContentView.swift` onto `ThemingShowcaseView`.
 ///
 /// Navigates from the sidebar to the feature, switches the preset picker
-/// from Standard to Classic, and asserts an identifier-bearing element's
-/// *label text* actually changes with it — testing the property (the theme
-/// visibly changed) rather than just that a tap registered. Verified by
+/// from Standard to Classic, and asserts a child reading the theme that
+/// `RootView` actually installed sees the new value. This tests the global
+/// write and the environment cascade, not merely that a tap registered.
+/// The test then leaves and re-enters the feature to prove the app-owned
+/// selection survives view reconstruction. Verified by
 /// hand to fail when `ThemingFeature.makeView` is reverted to
 /// `NotYetPortedView` (temporarily reverted, ran red, restored — see the PR
 /// body for the transcript).
@@ -52,6 +54,26 @@ final class ThemingUITests: XCTestCase {
             initialValue,
             updatedValue,
             "Switching presets must visibly change the live preview, not just register a tap"
+        )
+
+        showSidebarIfNeeded(app: app)
+        let cloudRow = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == 'Cloud'"))
+            .firstMatch
+        XCTAssertTrue(waitForElement(cloudRow, timeout: 5), "Sidebar should list a Cloud row")
+        cloudRow.tap()
+
+        showSidebarIfNeeded(app: app)
+        let themingRow = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == 'Theming'"))
+            .firstMatch
+        XCTAssertTrue(waitForElement(themingRow, timeout: 5), "Sidebar should still list a Theming row")
+        themingRow.tap()
+
+        let restoredValue = app.descendants(matching: .any)["theming-corner-radius-label"].label
+        XCTAssertTrue(
+            restoredValue.contains("16pt"),
+            "Classic must remain selected after the feature view is reconstructed, got: \(restoredValue)"
         )
 
         captureScreenshot(name: "Theming-Classic-Preset")

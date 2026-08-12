@@ -2,10 +2,10 @@ import SwiftUI
 import ManifoldKit
 
 /// Preset entries the Theming showcase's picker offers. Each maps to a
-/// concrete ``ManifoldTheme`` value written straight into
-/// ``AppEnvironment/theme`` — the cascading `.manifoldTheme(env.theme)`
-/// modifier `RootView` already applies propagates the pick app-wide, to
-/// every chat surface, not just this screen.
+/// concrete ``ManifoldTheme`` value exposed by ``AppEnvironment/theme``.
+/// `RootView` applies Standard and Brand with `.manifoldTheme(_:)`, and
+/// Classic with `.classicManifoldTheme()` so its component-style presets
+/// change along with its tokens.
 enum ThemingPreset: String, CaseIterable, Identifiable {
     case standard
     case classic
@@ -52,16 +52,13 @@ enum ThemingPreset: String, CaseIterable, Identifiable {
 
 /// Theme-showcase view for the Theming feature (manifold-apps W2 P6).
 ///
-/// A segmented picker switches among ``ThemingPreset``s and writes the
-/// selection into ``AppEnvironment/theme``; `RootView`'s existing
-/// `.manifoldTheme(env.theme)` modifier cascades the change to every chat
-/// surface in the app. A live preview pair of real `MessageBubbleView`s
+/// A segmented picker binds to ``AppEnvironment/themePreset``; `RootView`
+/// cascades the matching modifier to every chat surface in the app. A live
+/// preview pair of real `MessageBubbleView`s
 /// (the same view `ChatView` renders in the actual conversation) makes the
 /// change visible in place, without leaving this screen.
 struct ThemingShowcaseView: View {
     let env: AppEnvironment
-
-    @State private var preset: ThemingPreset = .standard
 
     private static let previewSessionID = UUID()
 
@@ -76,9 +73,6 @@ struct ThemingShowcaseView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .navigationTitle("Theming")
-        .onChange(of: preset, initial: true) { _, newValue in
-            env.theme = newValue.theme
-        }
     }
 
     private var header: some View {
@@ -92,7 +86,13 @@ struct ThemingShowcaseView: View {
     }
 
     private var picker: some View {
-        Picker("Appearance", selection: $preset) {
+        Picker(
+            "Appearance",
+            selection: Binding(
+                get: { env.themePreset },
+                set: { env.themePreset = $0 }
+            )
+        ) {
             ForEach(ThemingPreset.allCases) { option in
                 Text(option.title).tag(option)
             }
@@ -112,13 +112,10 @@ struct ThemingShowcaseView: View {
             }
             .environment(env.viewModel)
 
-            Text("Bubble corner radius: \(Int(preset.theme.chatTheme.cornerRadius))pt")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .accessibilityIdentifier("theming-corner-radius-label")
+            EffectiveThemeReadout()
         }
         .padding(16)
-        .background(preset.theme.surface, in: RoundedRectangle(cornerRadius: 16))
+        .background(env.theme.surface, in: RoundedRectangle(cornerRadius: 16))
     }
 
     private var userPreviewMessage: ChatMessage {
@@ -135,5 +132,19 @@ struct ThemingShowcaseView: View {
             content: "Every bubble reads its chrome from the active ManifoldTheme.",
             sessionID: Self.previewSessionID
         )
+    }
+}
+
+/// Reads the actual `ManifoldTheme` environment installed by `RootView`.
+/// Keeping the UI-test readout on this side of the cascade means deleting
+/// either the global preset write or the root modifier makes the test fail.
+private struct EffectiveThemeReadout: View {
+    @Environment(\.manifoldTheme) private var theme
+
+    var body: some View {
+        Text("Bubble corner radius: \(Int(theme.chatTheme.cornerRadius))pt")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .accessibilityIdentifier("theming-corner-radius-label")
     }
 }

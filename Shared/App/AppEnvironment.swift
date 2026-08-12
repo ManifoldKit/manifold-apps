@@ -35,7 +35,11 @@ final class AppEnvironment {
     let sessionManager: SessionManagerViewModel
     let toolRegistry: ToolRegistry
     let toolApprovalGate: UIToolApprovalGate
-    var theme: ManifoldTheme = .standard
+    var themePreset: ThemingPreset = .standard
+
+    var theme: ManifoldTheme {
+        themePreset.theme
+    }
 
     private init(
         bootstrap: ManifoldBootstrap,

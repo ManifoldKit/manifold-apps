@@ -31,6 +31,21 @@ struct RootView: View {
     }
 
     var body: some View {
+        themedRoot
+    }
+
+    @ViewBuilder
+    private var themedRoot: some View {
+        if env.themePreset == .classic {
+            rootContent
+                .classicManifoldTheme()
+        } else {
+            rootContent
+                .manifoldTheme(env.theme)
+        }
+    }
+
+    private var rootContent: some View {
         NavigationSplitView {
             sidebar
         } detail: {
@@ -38,7 +53,6 @@ struct RootView: View {
         }
         .environment(env.viewModel)
         .environment(env.sessionManager)
-        .manifoldTheme(env.theme)
         .task {
             guard !didInstallFeatures else { return }
             didInstallFeatures = true
