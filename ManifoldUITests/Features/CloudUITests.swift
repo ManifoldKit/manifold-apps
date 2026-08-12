@@ -90,9 +90,16 @@ final class CloudUITests: XCTestCase {
             "Endpoint editor should appear with an 'Add Endpoint' title"
         )
 
+        // `CONTAINS[c]`, not `==`: `populateFields()` pre-fills all three
+        // fields from the default provider (name/baseURL/modelName =
+        // `provider.displayName`/`defaultBaseURL`/`defaultModelName`) the
+        // instant the editor appears, so the accessibility label for a
+        // non-empty `TextField(title, text:)` is not guaranteed to equal the
+        // bare title string — observed failing under exact match on-device
+        // (iPhone 17 simulator, iOS 26.5) before this fix.
         for fieldLabel in ["Display Name", "Server URL", "Model Name"] {
             let label = app.descendants(matching: .any)
-                .matching(NSPredicate(format: "label == %@ OR value == %@", fieldLabel, fieldLabel))
+                .matching(NSPredicate(format: "label CONTAINS[c] %@ OR value CONTAINS[c] %@", fieldLabel, fieldLabel))
                 .firstMatch
             XCTAssertTrue(label.waitForExistence(timeout: 3), "\(fieldLabel) label should exist in editor")
         }
