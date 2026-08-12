@@ -90,27 +90,34 @@ final class CloudUITests: XCTestCase {
             "Endpoint editor should appear with an 'Add Endpoint' title"
         )
 
-        // `CONTAINS[c]`, not `==`: `populateFields()` pre-fills all three
-        // fields from the default provider (name/baseURL/modelName =
-        // `provider.displayName`/`defaultBaseURL`/`defaultModelName`) the
-        // instant the editor appears, so the accessibility label for a
-        // non-empty `TextField(title, text:)` is not guaranteed to equal the
-        // bare title string — observed failing under exact match on-device
-        // (iPhone 17 simulator, iOS 26.5) before this fix.
-        for fieldLabel in ["Display Name", "Server URL", "Model Name"] {
-            let label = app.descendants(matching: .any)
-                .matching(NSPredicate(format: "label CONTAINS[c] %@ OR value CONTAINS[c] %@", fieldLabel, fieldLabel))
-                .firstMatch
-            XCTAssertTrue(label.waitForExistence(timeout: 3), "\(fieldLabel) label should exist in editor")
-        }
+        // `populateFields()` immediately replaces the three TextField
+        // prompts with the default provider's values. On current iOS the
+        // resulting accessibility elements expose those values but not the
+        // original prompt labels, so assert the published OpenAI defaults
+        // the editor actually rendered instead of searching for prompts
+        // that are no longer in the accessibility tree.
         XCTAssertGreaterThanOrEqual(
             app.textFields.count, 3,
             "Editor should contain at least 3 text fields (Display Name, Server URL, Model Name)"
         )
+        for expectedValue in ["OpenAI", "https://api.openai.com", "gpt-4o-mini"] {
+            let populatedField = app.textFields.matching(
+                NSPredicate(format: "value == %@", expectedValue)
+            ).firstMatch
+            XCTAssertTrue(
+                populatedField.waitForExistence(timeout: 3),
+                "Endpoint editor should populate a field with the default value \(expectedValue)"
+            )
+        }
 
         captureScreenshot(name: "Cloud-Add-Editor-Fields")
 
         // Cancel — never tap Save (see SAFETY note above).
+        let saveButton = app.buttons["Save"]
+        XCTAssertTrue(
+            saveButton.waitForExistence(timeout: 3),
+            "Endpoint editor should expose its Save action"
+        )
         let cancelButton = app.buttons["Cancel"]
         if waitForElement(cancelButton, timeout: 2) {
             cancelButton.tap()
@@ -120,7 +127,7 @@ final class CloudUITests: XCTestCase {
 
         let editorGone = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "exists == false"),
-            object: editorTitle
+            object: saveButton
         )
         XCTAssertEqual(
             XCTWaiter.wait(for: [editorGone], timeout: 3),
