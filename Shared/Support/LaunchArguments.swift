@@ -10,6 +10,13 @@ enum LaunchArguments {
         CommandLine.arguments.contains("--uitesting")
     }
 
+    /// Seeds ChatView's real API-key recovery banner for the endpoint-store
+    /// UI regression. Kept separate from `--uitesting` so the smoke suite's
+    /// normal launch state is unchanged.
+    static var showsAPIKeyRecovery: Bool {
+        isUITesting && CommandLine.arguments.contains("--show-api-key-recovery")
+    }
+
     /// The value following `--scenario <id>`, if present. Reserved for the
     /// future `ScenariosFeature` (mirrors core's `--bck-demo-scenario`);
     /// unused until that feature is ported.

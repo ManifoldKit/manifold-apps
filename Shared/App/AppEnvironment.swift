@@ -170,6 +170,14 @@ final class AppEnvironment {
             viewModel.dispatchSelectedLoad()
         }
 
+        if LaunchArguments.showsAPIKeyRecovery {
+            viewModel.activeError = ChatError(
+                kind: .configuration,
+                message: "UI test: verify the configured cloud endpoint.",
+                recovery: .configureAPIKey
+            )
+        }
+
         return AppEnvironment(
             bootstrap: bootstrap,
             viewModel: viewModel,

@@ -80,14 +80,11 @@ struct RootView: View {
             // the receiver, so calling it first would drop the switcher.
             ChatView(showModelManagement: $showModelManagement)
                 .chatModelSwitcher { modelSwitcherContent }
-                // `.environment(\.endpointStore, …)` on an ancestor of
-                // ChatView is NOT enough — verified directly: ChatView
-                // presents `.chatAPIConfiguration`'s content via a
-                // sheet/popover from deep inside its own subtree, and a
-                // plain `EnvironmentValues` key set merely on an ancestor
-                // chain (e.g. on RootView's outer NavigationSplitView) does
-                // not reliably propagate into that presented content. The
-                // injection has to sit on the presented view itself.
+                // APIConfigurationView and its nested editor both read the
+                // store from EnvironmentValues. Attach it to the supplied
+                // presentation content so ChatView's settings and API-key
+                // recovery paths are wired explicitly at their point of use
+                // (pinned by EndpointStoreUITests).
                 .chatAPIConfiguration {
                     APIConfigurationView()
                         .environment(\.endpointStore, env.bootstrap.endpointStore)
