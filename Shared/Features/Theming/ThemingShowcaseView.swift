@@ -119,7 +119,6 @@ struct ThemingShowcaseView: View {
         }
         .padding(16)
         .background(preset.theme.surface, in: RoundedRectangle(cornerRadius: 16))
-        .accessibilityIdentifier("theming-preview-surface")
     }
 
     private var userPreviewMessage: ChatMessage {
