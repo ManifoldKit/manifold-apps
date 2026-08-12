@@ -10,14 +10,12 @@ import XCTest
 /// unchanged — see `CloudFeature.swift`'s doc comment for why the two
 /// navigation paths differ).
 ///
-/// SAFETY: no live network calls and no real Keychain writes. Every test
-/// here stops at "Add Endpoint" → assert the editor rendered → Cancel; none
-/// taps "Save", so `EndpointStore.insertEndpoint` and
-/// `KeychainService.store` are never invoked. The in-memory SwiftData store
-/// used under `--uitesting` (`AppEnvironment.bootstrap`) means even a
-/// hypothetical save would not touch a real on-disk store, but avoiding the
-/// tap entirely also means avoiding a real Keychain write, which the
-/// in-memory store swap does NOT protect against.
+/// SAFETY: no live network calls and no real Keychain writes. The save-flow
+/// test leaves the API-key field empty, so `EndpointStore.insertEndpoint`
+/// writes only to the in-memory SwiftData store installed under
+/// `--uitesting`; `KeychainService.store` is skipped by the editor for an
+/// empty key. The test selects the resulting endpoint but never sends a
+/// message, so the configured backend makes no network request.
 final class CloudUITests: XCTestCase {
 
     var app: XCUIApplication!
@@ -40,31 +38,25 @@ final class CloudUITests: XCTestCase {
 
     // MARK: - CloudAPIUITests.testEmptyStateMessage
 
-    func testEmptyStateOrEndpointsList() throws {
+    func testEmptyStateMessage() throws {
         navigateToCloudFeature()
 
-        // Under `--uitesting` no endpoints are seeded, so the empty-state
-        // Text should render; if that ever changes, the "Endpoints" section
-        // header is the other valid state (mirrors core's same fallback).
+        // Every UI-test launch gets a fresh in-memory store, so accepting the
+        // always-present section header here would make this assertion
+        // tautological.
         let emptyText = app.descendants(matching: .any)
             .matching(NSPredicate(format: "label CONTAINS[c] 'No cloud APIs configured'")).firstMatch
-        let hasEmptyState = waitForElement(emptyText, timeout: 3)
 
         captureScreenshot(name: "Cloud-Feature-Empty-State")
-
-        if !hasEmptyState {
-            let endpointsSection = app.descendants(matching: .any)
-                .matching(NSPredicate(format: "label == 'Endpoints'")).firstMatch
-            XCTAssertTrue(
-                waitForElement(endpointsSection, timeout: 3),
-                "Should show either the empty-state message or the Endpoints section"
-            )
-        }
+        XCTAssertTrue(
+            waitForElement(emptyText, timeout: 3),
+            "A fresh in-memory endpoint store should show the empty-state message"
+        )
     }
 
     // MARK: - CloudAPIUITests.testAddEndpointFlow
 
-    func testAddEndpointFlowRendersEditorThenCancels() throws {
+    func testSavedEndpointAppearsInModelSwitcherAndCanBeSelected() throws {
         navigateToCloudFeature()
 
         let addButton: XCUIElement
@@ -112,18 +104,15 @@ final class CloudUITests: XCTestCase {
 
         captureScreenshot(name: "Cloud-Add-Editor-Fields")
 
-        // Cancel — never tap Save (see SAFETY note above).
+        // Leave API Key empty: the editor persists the record but skips its
+        // Keychain write (see SAFETY above).
         let saveButton = app.buttons["Save"]
         XCTAssertTrue(
             saveButton.waitForExistence(timeout: 3),
             "Endpoint editor should expose its Save action"
         )
-        let cancelButton = app.buttons["Cancel"]
-        if waitForElement(cancelButton, timeout: 2) {
-            cancelButton.tap()
-        } else {
-            dismissSheet(app: app)
-        }
+        XCTAssertTrue(saveButton.isEnabled && saveButton.isHittable, "Populated defaults should enable Save")
+        saveButton.tap()
 
         let editorGone = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "exists == false"),
@@ -132,7 +121,75 @@ final class CloudUITests: XCTestCase {
         XCTAssertEqual(
             XCTWaiter.wait(for: [editorGone], timeout: 3),
             .completed,
-            "Endpoint editor should dismiss after Cancel"
+            "A successful EndpointStore insert should dismiss the editor"
+        )
+
+        let missingStoreError = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS[c] 'Endpoint store is not configured'")
+        ).firstMatch
+        XCTAssertFalse(missingStoreError.exists, "CloudFeature must inject its EndpointStore into the editor")
+
+        let savedEndpoint = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS[c] 'OpenAI' OR value CONTAINS[c] 'OpenAI'")
+        ).firstMatch
+        XCTAssertTrue(
+            waitForElement(savedEndpoint, timeout: 3),
+            "The saved default endpoint should appear in the Cloud APIs list"
+        )
+
+        // Leaving Cloud causes RootView to refresh ChatViewModel's public
+        // endpoint list from the store. The resulting row is the proof that
+        // persistence is connected to the chat surface, not only to this form.
+        showSidebarIfNeeded(app: app)
+        let chatRow = app.staticTexts["chat-sidebar-row"]
+        XCTAssertTrue(
+            chatRow.waitForExistence(timeout: 5),
+            "Sidebar should expose an explicit route back to ChatView"
+        )
+        if chatRow.isHittable {
+            chatRow.tap()
+        } else {
+            chatRow.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        }
+
+        let chip = app.descendants(matching: .any)["chat-model-switcher-chip"]
+        XCTAssertTrue(chip.waitForExistence(timeout: 5) && chip.isHittable, "Chat should expose its model switcher")
+        chip.tap()
+
+        let switcher = app.descendants(matching: .any)["model-switcher-list"]
+        XCTAssertTrue(switcher.waitForExistence(timeout: 5), "Model switcher should open")
+        let endpointRow = switcher.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS[c] 'OpenAI'")
+        ).firstMatch
+        XCTAssertTrue(
+            endpointRow.waitForExistence(timeout: 5) && endpointRow.isHittable,
+            "The saved endpoint must be published into ChatViewModel.availableEndpoints"
+        )
+        endpointRow.tap()
+
+        let selected = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value CONTAINS[c] 'In use'"),
+            object: endpointRow
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [selected], timeout: 5),
+            .completed,
+            "Selecting a saved endpoint should make it the active chat choice"
+        )
+
+        captureScreenshot(name: "Cloud-Endpoint-In-Model-Switcher")
+
+        // The UI-test bootstrap deliberately does not register live cloud
+        // factories. A dispatched load therefore fails locally before any
+        // network request; requiring that deterministic failure proves
+        // RootView did more than assign `selectedEndpoint`.
+        dismissSheet(app: app)
+        let dispatchedLoadFailure = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS[c] 'Failed to connect'")
+        ).firstMatch
+        XCTAssertTrue(
+            dispatchedLoadFailure.waitForExistence(timeout: 5),
+            "Selecting an endpoint must dispatch its load; the UI-test backend should fail locally with 'Failed to connect'"
         )
     }
 

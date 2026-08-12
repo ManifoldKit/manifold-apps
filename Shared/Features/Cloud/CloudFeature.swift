@@ -21,10 +21,10 @@ import ManifoldUIModelManagement
 /// nothing left for this feature to build; it only has to adapt the view to
 /// the environment it needs.
 ///
-/// "Route to backend" (making a saved endpoint the active one) is not part
-/// of this view — that already exists via `RootView`'s model switcher
-/// (`.chatModelSwitcher`), which sets `env.viewModel.selectedEndpoint`. Nothing
-/// further to wire here.
+/// "Route to backend" (making a saved endpoint the active one) remains in
+/// `RootView`'s model switcher. The host refreshes `availableEndpoints` when
+/// this screen is left, then dispatches the selected endpoint load; setting
+/// `selectedEndpoint` alone only records intent at ManifoldKit v0.75.0.
 enum CloudFeature: AppFeature {
     static let id = "cloud"
     static let title = "Cloud"

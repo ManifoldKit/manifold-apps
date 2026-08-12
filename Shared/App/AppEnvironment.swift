@@ -143,6 +143,16 @@ final class AppEnvironment {
         )
         viewModel.configure(bootstrap: bootstrap)
 
+        // `ChatViewModel` does not fetch the consumer-owned EndpointStore
+        // automatically. Populate it before session restoration so a saved
+        // endpoint ID can resolve, and before first-run loading so the model
+        // switcher is truthful on the first rendered frame.
+        do {
+            viewModel.setAvailableEndpoints(try await bootstrap.endpointStore.fetchEndpoints())
+        } catch {
+            Log.persistence.error("Failed to load cloud endpoints: \(String(describing: error), privacy: .public)")
+        }
+
         let sessionManager = SessionManagerViewModel()
         await sessionManager.configureAndLoad(bootstrap: bootstrap)
 
@@ -185,6 +195,16 @@ final class AppEnvironment {
             toolRegistry: toolRegistry,
             toolApprovalGate: toolApprovalGate
         )
+    }
+
+    /// Refreshes the model switcher's cloud rows after the endpoint manager
+    /// has added, edited, or deleted a record.
+    func refreshAvailableEndpoints() async {
+        do {
+            viewModel.setAvailableEndpoints(try await bootstrap.endpointStore.fetchEndpoints())
+        } catch {
+            Log.persistence.error("Failed to refresh cloud endpoints: \(String(describing: error), privacy: .public)")
+        }
     }
 
     /// Deterministic scripted turns for `--uitesting` runs — enough for the

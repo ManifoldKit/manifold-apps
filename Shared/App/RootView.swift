@@ -46,14 +46,24 @@ struct RootView: View {
                 feature.install(into: env)
             }
         }
+        .onChange(of: selectedFeatureID) { oldValue, _ in
+            guard oldValue == CloudFeature.id else { return }
+            Task { await env.refreshAvailableEndpoints() }
+        }
     }
 
     private var sidebar: some View {
         VStack(spacing: 0) {
             SessionListView()
             Divider()
-            List(features, selection: $selectedFeatureID) { entry in
-                Label(entry.title, systemImage: entry.systemImage)
+            List(selection: $selectedFeatureID) {
+                Label("Chat", systemImage: "bubble.left.and.bubble.right")
+                    .tag("chat")
+                    .accessibilityIdentifier("chat-sidebar-row")
+
+                ForEach(features) { entry in
+                    Label(entry.title, systemImage: entry.systemImage)
+                }
             }
         }
         .navigationTitle("Chats")
@@ -112,6 +122,7 @@ struct RootView: View {
                     env.viewModel.selectedModel = model
                 case .endpoint(let endpoint):
                     env.viewModel.selectedEndpoint = endpoint
+                    env.viewModel.dispatchSelectedLoad()
                 }
             },
             onFixEndpoint: { _ in showModelManagement = true }
