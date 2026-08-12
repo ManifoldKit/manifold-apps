@@ -11,9 +11,14 @@ extension XCTestCase {
 
     /// Launches the app in deterministic UI-testing mode.
     @discardableResult
-    func launchApp(file: StaticString = #filePath, line: UInt = #line) -> XCUIApplication {
+    func launchApp(
+        additionalArguments: [String] = [],
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments += ["--uitesting"]
+        app.launchArguments += additionalArguments
         #if !os(macOS)
         app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
         #endif

@@ -80,7 +80,15 @@ struct RootView: View {
             // the receiver, so calling it first would drop the switcher.
             ChatView(showModelManagement: $showModelManagement)
                 .chatModelSwitcher { modelSwitcherContent }
-                .chatAPIConfiguration { APIConfigurationView() }
+                // APIConfigurationView and its nested editor both read the
+                // store from EnvironmentValues. Attach it to the supplied
+                // presentation content so ChatView's settings and API-key
+                // recovery paths are wired explicitly at their point of use
+                // (pinned by EndpointStoreUITests).
+                .chatAPIConfiguration {
+                    APIConfigurationView()
+                        .environment(\.endpointStore, env.bootstrap.endpointStore)
+                }
         }
     }
 

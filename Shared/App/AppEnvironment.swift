@@ -15,22 +15,40 @@ import ManifoldTools
 /// core's own source during tonight's W0 probe). Later features (Cloud,
 /// Scenarios, …) reach them through `env.bootstrap`, not by growing this
 /// type's own stored-property surface.
+///
+/// `toolRegistry` is likewise exposed directly rather than reachable only
+/// through `viewModel.inferenceService` (which is `internal` and can't be
+/// widened per AGENTS.md's "Service sharing" convention): at v0.75.0,
+/// `InferenceService.toolRegistry` is a get-only computed property backed by
+/// an init-time-only `ToolRegistry?`, and `ChatViewModel.toolApprovalGate`
+/// is a `let` — so a feature confined to `Shared/Features/<Name>/` can never
+/// register a dispatchable tool unless the registry (and the gate) are
+/// constructed here, before `InferenceService`, and threaded through both
+/// initializers. Mirrors core's own `Example/Advanced/ManifoldDemoApp.swift`
+/// `init()`, which builds `registry`/`approvalGate` before the service for
+/// exactly this reason (lines 88–93).
 @MainActor
 @Observable
 final class AppEnvironment {
     let bootstrap: ManifoldBootstrap
     let viewModel: ChatViewModel
     let sessionManager: SessionManagerViewModel
+    let toolRegistry: ToolRegistry
+    let toolApprovalGate: UIToolApprovalGate
     var theme: ManifoldTheme = .standard
 
     private init(
         bootstrap: ManifoldBootstrap,
         viewModel: ChatViewModel,
-        sessionManager: SessionManagerViewModel
+        sessionManager: SessionManagerViewModel,
+        toolRegistry: ToolRegistry,
+        toolApprovalGate: UIToolApprovalGate
     ) {
         self.bootstrap = bootstrap
         self.viewModel = viewModel
         self.sessionManager = sessionManager
+        self.toolRegistry = toolRegistry
+        self.toolApprovalGate = toolApprovalGate
     }
 
     /// Builds the composition root.
@@ -62,16 +80,33 @@ final class AppEnvironment {
         let isUITesting = LaunchArguments.isUITesting
         let configuration = ManifoldConfiguration(appName: appName, bundleIdentifier: bundleIdentifier)
 
+        // Constructed before InferenceService, on both paths below, so a
+        // feature confined to Shared/Features/<Name>/ has something to
+        // register a tool onto — see the type doc comment above for why
+        // this can't be wired after the fact. Empty registry + the default
+        // policy change no existing behavior: GenerationQueue treats a
+        // zero-tool registry identically to no registry (no tools are ever
+        // offered to the model either way), and `.askOncePerSession` only
+        // matters once a feature actually registers a tool that gets
+        // called.
+        let toolRegistry = ToolRegistry()
+        let toolApprovalGate = UIToolApprovalGate(policy: .askOncePerSession)
+
         let inferenceService: InferenceService
         if isUITesting {
             let scripted = ScriptedBackend(turns: uiTestTurns)
             inferenceService = InferenceService(
                 backend: scripted,
                 name: "ScriptedUITest",
-                modelName: "scripted-ui"
+                modelName: "scripted-ui",
+                toolRegistry: toolRegistry,
+                toolApprovalGate: toolApprovalGate
             )
         } else {
-            inferenceService = InferenceService()
+            inferenceService = InferenceService(
+                toolRegistry: toolRegistry,
+                toolApprovalGate: toolApprovalGate
+            )
         }
 
         // A ternary between two closure literals here (rather than an
@@ -103,6 +138,7 @@ final class AppEnvironment {
 
         let viewModel = ChatViewModel(
             inferenceService: inferenceService,
+            toolApprovalGate: toolApprovalGate,
             conversationRuntime: bootstrap.conversationRuntime
         )
         viewModel.configure(bootstrap: bootstrap)
@@ -134,7 +170,21 @@ final class AppEnvironment {
             viewModel.dispatchSelectedLoad()
         }
 
-        return AppEnvironment(bootstrap: bootstrap, viewModel: viewModel, sessionManager: sessionManager)
+        if LaunchArguments.showsAPIKeyRecovery {
+            viewModel.activeError = ChatError(
+                kind: .configuration,
+                message: "UI test: verify the configured cloud endpoint.",
+                recovery: .configureAPIKey
+            )
+        }
+
+        return AppEnvironment(
+            bootstrap: bootstrap,
+            viewModel: viewModel,
+            sessionManager: sessionManager,
+            toolRegistry: toolRegistry,
+            toolApprovalGate: toolApprovalGate
+        )
     }
 
     /// Deterministic scripted turns for `--uitesting` runs — enough for the
