@@ -41,3 +41,15 @@ feature and reassert the detail column. Keep stable
 macOS's native `List(selection:)` + tags. UI tests should target the identified
 buttons, use only bounded pre-activation scrolling when a row is genuinely
 not hittable, then assert the app-owned detail directly.
+
+## Ad-hoc simulator UI tests cannot prove App Group sharing cross-process
+
+Xcode can correctly generate `CODE_SIGN_ENTITLEMENTS` and a
+`*-Simulated.xcent` containing `com.apple.security.application-groups` while
+the locally ad-hoc-signed simulator app / UI-test runner still expose empty
+signed entitlements. In that configuration, `UserDefaults(suiteName:)` from
+the runner does not seed the app process's suite, even when both targets name
+the same group. Verify production configuration from the generated iPhoneOS
+build settings and entitlement intermediate; exercise the store/read/buffer
+logic in-process on the simulator, and do not describe that test as
+cross-process App Group proof.
