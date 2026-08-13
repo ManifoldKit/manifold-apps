@@ -102,7 +102,9 @@ final class ToolsUITests: XCTestCase {
 
     private func navigateToChat() {
         showSidebarIfNeeded(app: app)
-        let row = app.descendants(matching: .any)["chat-sidebar-row"]
+        // The row's icon inherits the same identifier, so constrain this to
+        // the single text node just as the Cloud UI test does.
+        let row = app.staticTexts["chat-sidebar-row"]
         XCTAssertTrue(row.waitForExistence(timeout: 5), "Sidebar should expose Chat")
         if row.isHittable {
             row.tap()
