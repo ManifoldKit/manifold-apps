@@ -68,13 +68,13 @@ extension XCTestCase {
     private func isSidebarVisible(app: XCUIApplication) -> Bool {
         app.staticTexts["Chats"].exists
             || app.buttons["new-chat-button"].exists
-            || firstSessionRow(app: app).exists
+            || identifiedSessionRow(app: app).exists
     }
 
     private func waitForSidebar(app: XCUIApplication, timeout: TimeInterval = 2) -> Bool {
         app.staticTexts["Chats"].waitForExistence(timeout: timeout)
             || app.buttons["new-chat-button"].waitForExistence(timeout: timeout)
-            || firstSessionRow(app: app).waitForExistence(timeout: timeout)
+            || identifiedSessionRow(app: app).waitForExistence(timeout: timeout)
     }
 
     // MARK: - Chat Detail
@@ -152,17 +152,26 @@ extension XCTestCase {
     }
 
     func firstSessionRow(app: XCUIApplication) -> XCUIElement {
-        let identifiedRow = app.cells.matching(NSPredicate(format: "identifier == 'session-row'")).firstMatch
-        if identifiedRow.exists {
-            return identifiedRow
-        }
+        let identified = identifiedSessionRow(app: app)
+        if identified.exists { return identified }
 
-        let identifiedOther = app.otherElements.matching(NSPredicate(format: "identifier == 'session-row'")).firstMatch
-        if identifiedOther.exists {
-            return identifiedOther
-        }
+        let titledSession = app.staticTexts.matching(NSPredicate(
+            format: "label == 'New Chat' OR label CONTAINS[c] 'updated'"
+        )).firstMatch
+        if titledSession.exists { return titledSession }
 
         return app.cells.firstMatch
+    }
+
+    private func identifiedSessionRow(app: XCUIApplication) -> XCUIElement {
+        let identifiedCell = app.cells.matching(
+            NSPredicate(format: "identifier == 'session-row'")
+        ).firstMatch
+        if identifiedCell.exists { return identifiedCell }
+
+        return app.otherElements.matching(
+            NSPredicate(format: "identifier == 'session-row'")
+        ).firstMatch
     }
 
     // MARK: - Screenshots

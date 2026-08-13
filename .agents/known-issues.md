@@ -16,3 +16,13 @@ gitignored, so there is nothing to lock the resolved version — a fresh
 `xcodegen generate` + build can pick up a newer ManifoldKit patch/minor at
 any time. If a build breaks after a ManifoldKit release, check
 ManifoldKit's own CHANGELOG.md before assuming a bug in this repo.
+
+## Sidebar detection must not accept an arbitrary cell
+
+Feature forms and lists also expose `XCUIElementTypeCell` descendants. A
+sidebar helper that falls back to `app.cells.firstMatch` can therefore report
+the sidebar as visible while a feature detail is still full-screen, then tap a
+form row instead of a chat session. Detect sidebar visibility only from its
+title, New Chat button, or a row with the explicit `session-row` identifier;
+keep the generic-cell fallback only for lookup after the sidebar is known to
+be visible.
