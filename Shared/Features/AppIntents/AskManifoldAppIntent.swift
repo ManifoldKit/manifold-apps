@@ -22,15 +22,14 @@ import ManifoldInference
 ///    ownership — see the PR description) and no `.onOpenURL` handler on
 ///    `Mobile/ManifoldApp.swift` / `Studio/ManifoldStudioApp.swift` (also
 ///    outside this feature's ownership). `openAppWhenRun` alone is enough
-///    to guarantee the cold-launch case: `AppIntentsFeature.install(into:)`
-///    drains the App Group envelope every time `RootView` appears for the
-///    first time in a fresh process, which is exactly what a cold launch
-///    produces.
+///    to guarantee the cold-launch case: `AppEnvironment.bootstrap(...)`
+///    stages the envelope during startup, then
+///    `AppIntentsFeature.install(into:)` drains it only after the real
+///    InferenceService publishes model readiness.
 /// 3. A **warm** relaunch (app already foregrounded when the intent fires
-///    again) is NOT caught today — `RootView` installs features exactly
-///    once per process. Catching that case needs a scenePhase/`.onOpenURL`
-///    hook in the app-entry files above; flagged as a known gap rather than
-///    silently dropped.
+///    again) is NOT caught today. Catching that case needs a
+///    scenePhase/`.onOpenURL` hook in the app-entry files above; flagged as
+///    a known gap rather than silently dropped.
 public struct AskManifoldAppIntent: AppIntent {
 
     public static let title: LocalizedStringResource = "Ask Manifold"
@@ -64,15 +63,11 @@ public struct AskManifoldAppIntent: AppIntent {
             attachments: [],
             source: "appIntent"
         )
-        if let defaults = UserDefaults(suiteName: ManifoldAppGroup.identifier) {
-            do {
-                let encoded = try JSONEncoder().encode(envelope)
-                defaults.set(encoded, forKey: ManifoldAppGroup.inboundKey)
-            } catch {
-                Log.ui.error("AskManifoldAppIntent: failed to encode inbound envelope: \(String(describing: error), privacy: .public)")
-            }
-        } else {
-            Log.ui.error("AskManifoldAppIntent: could not open App Group '\(ManifoldAppGroup.identifier, privacy: .public)' — is the entitlement configured?")
+        do {
+            try InboundAppIntentEnvelopeStore.write(envelope)
+        } catch {
+            Log.ui.error("AskManifoldAppIntent: failed to persist inbound envelope: \(String(describing: error), privacy: .public)")
+            throw error
         }
 
         return .result()

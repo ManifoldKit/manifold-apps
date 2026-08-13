@@ -1,12 +1,10 @@
 import Foundation
 import ManifoldInference
 
-/// JSON envelope written to App Group defaults by a future inbound-handoff
-/// writer (an App Intent) and read back by the host app's `.onOpenURL`
-/// handler. Ported near-verbatim from ManifoldKit's own
-/// `Example/Advanced/Intents/InboundPayloadEnvelope.swift` ahead of the
-/// AppIntents/Extensions feature work that will actually wire it up
-/// (manifold-apps W2/W3) — kept in `Shared/Support/` rather than a feature
+/// JSON envelope written to App Group defaults by an App Intent and consumed
+/// by the app's startup composition. Ported from ManifoldKit's own
+/// `Example/Advanced/Intents/InboundPayloadEnvelope.swift` and kept in
+/// `Shared/Support/` rather than a feature
 /// directory because both the future AppIntents feature and any future
 /// Share/Action Extension targets need it.
 ///
@@ -40,9 +38,8 @@ struct InboundPayloadEnvelope: Codable, Sendable {
     }
 }
 
-/// App Group identifier shared between a future inbound-handoff writer (an
-/// App Intent) and the app's `.onOpenURL` handler (reader). Centralised so
-/// renaming stays in one place.
+/// App Group identifier shared between the AppIntent writer and startup
+/// reader. Centralised so renaming stays in one place.
 ///
 /// The literal values here intentionally mirror ``ManifoldSharedAppGroup``
 /// (in `PendingSharePayload.swift`). They're duplicated rather than

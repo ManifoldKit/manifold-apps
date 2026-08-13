@@ -23,31 +23,57 @@ enum AppIntentsFeature: AppFeature {
     /// Single-slot buffer for an inbound payload that arrives before the
     /// runtime is ready to ingest it.
     ///
-    /// Ported (in `Shared/Support/InboundPayload/Concurrency/`) ahead of
-    /// this feature so its shape was settled before this worker landed;
-    /// this is the first real producer/consumer pair to exercise it.
-    /// `install(into:)` below is currently both the sole writer (seeded
-    /// from the App Group envelope on cold launch) and the sole reader
-    /// (drained into `env.viewModel.ingest(_:)` on the very next line) — a
-    /// future `.onOpenURL` / scenePhase hook on `Mobile/ManifoldApp.swift`
-    /// / `Studio/ManifoldStudioApp.swift` (outside this feature's
-    /// ownership) can call `.store(_:)` on this same instance to cover the
-    /// warm-relaunch case documented on `AskManifoldAppIntent`.
+    /// Startup stores the App Group envelope here before bootstrap, and
+    /// `install(into:)` drains it only after the service publishes `.ready`.
+    /// A future `.onOpenURL` / scenePhase hook can store into this same actor
+    /// to cover the warm-relaunch case documented on
+    /// `AskManifoldAppIntent`.
     static let pendingPayloadBuffer = PendingPayloadBuffer()
+    private static var deliveryTask: Task<Void, Never>?
+    private(set) static var inboundHandoffStatus = "No inbound AppIntent payload staged."
+
+    /// Startup-phase hook called as soon as the composition root has created
+    /// its InferenceService. This intentionally precedes session restoration,
+    /// model loading, and RootView construction: background AskManifoldIntent
+    /// invocations do not open the app and cannot depend on a view appearing.
+    static func configureBackgroundIntentHandler(inferenceService: InferenceService) async {
+        if #available(iOS 18, macOS 15, *) {
+            await ManifoldIntentConfiguration.shared.configure(
+                handler: RuntimeHandler(inferenceService: inferenceService)
+            )
+        }
+    }
+
+    /// Consumes the App Group slot before the potentially long bootstrap. The
+    /// decoded payload remains in the actor buffer until model readiness is
+    /// published; malformed data is cleared and reported instead of replayed.
+    static func stageInboundPayloadDuringStartup() async {
+        InboundAppIntentEnvelopeStore.seedUITestEnvelopeIfRequested()
+        switch InboundAppIntentEnvelopeStore.take() {
+        case .empty:
+            inboundHandoffStatus = "No inbound AppIntent payload staged."
+        case .payload(let payload):
+            await pendingPayloadBuffer.store(payload)
+            inboundHandoffStatus = "Inbound AppIntent payload buffered until model readiness."
+        case .malformed(let error):
+            inboundHandoffStatus = "Malformed inbound AppIntent payload discarded."
+            Log.ui.warning("AppIntentsFeature: malformed inbound envelope discarded: \(String(describing: error), privacy: .public)")
+        case .appGroupUnavailable:
+            inboundHandoffStatus = "App Group unavailable; inbound AppIntent handoff disabled."
+            Log.ui.error("AppIntentsFeature: App Group '\(ManifoldAppGroup.identifier, privacy: .public)' unavailable")
+        }
+    }
 
     static func install(into env: AppEnvironment) {
-        Task { @MainActor in
-            if let payload = Self.readInboundEnvelope() {
-                await pendingPayloadBuffer.store(payload)
-            }
-            if let payload = await pendingPayloadBuffer.drain() {
+        guard deliveryTask == nil else { return }
+        let readinessUpdates = env.bootstrap.inferenceService.modelLoadReadinessUpdates()
+        deliveryTask = Task { @MainActor in
+            defer { deliveryTask = nil }
+            await pendingPayloadBuffer.deliverWhenModelReady(
+                readinessUpdates: readinessUpdates
+            ) { payload in
                 await env.viewModel.ingest(payload)
-            }
-
-            if #available(iOS 18, macOS 15, *) {
-                await ManifoldIntentConfiguration.shared.configure(
-                    handler: RuntimeHandler(inferenceService: env.bootstrap.inferenceService)
-                )
+                inboundHandoffStatus = "Inbound AppIntent payload delivered after model readiness."
             }
         }
     }
@@ -55,7 +81,11 @@ enum AppIntentsFeature: AppFeature {
     static func makeView(env: AppEnvironment) -> AnyView {
         if #available(iOS 26, macOS 26, *) {
             return AnyView(
-                AppIntentToolsView(toolRegistry: env.toolRegistry)
+                AppIntentToolsView(
+                    toolRegistry: env.toolRegistry,
+                    inferenceService: env.bootstrap.inferenceService,
+                    inboundHandoffStatus: inboundHandoffStatus
+                )
                     .accessibilityIdentifier("appintents-feature-view")
             )
         }
@@ -65,50 +95,6 @@ enum AppIntentsFeature: AppFeature {
         )
     }
 
-    // MARK: - Inbound payload handoff
-
-    /// Reads and clears the JSON envelope `AskManifoldAppIntent` may have
-    /// written to the shared App Group defaults before this launch,
-    /// decoding it into the `InboundPayload` shape
-    /// `ChatViewModel.ingest(_:)` expects.
-    ///
-    /// Ported from ManifoldKit's own `ManifoldDemoApp.handleOpenURL(_:)`,
-    /// minus the `.onOpenURL`/URL-scheme trigger this app doesn't have —
-    /// see `AskManifoldAppIntent`'s doc comment.
-    private static func readInboundEnvelope() -> InboundPayload? {
-        guard let defaults = UserDefaults(suiteName: ManifoldAppGroup.identifier),
-              let data = defaults.data(forKey: ManifoldAppGroup.inboundKey) else {
-            return nil
-        }
-        // Clear immediately so a decode failure or a crash mid-ingest
-        // doesn't replay the same envelope on the next launch.
-        defaults.removeObject(forKey: ManifoldAppGroup.inboundKey)
-
-        let envelope: InboundPayloadEnvelope
-        do {
-            envelope = try JSONDecoder().decode(InboundPayloadEnvelope.self, from: data)
-        } catch {
-            Log.ui.warning("AppIntentsFeature: failed to decode inbound envelope; discarding")
-            return nil
-        }
-
-        return InboundPayload(
-            prompt: envelope.prompt,
-            attachments: envelope.attachments,
-            source: decodeSource(envelope.source)
-        )
-    }
-
-    private static func decodeSource(_ raw: String) -> InboundPayload.Source {
-        switch raw {
-        case "deepLink": return .deepLink
-        case "shareExtension": return .shareExtension
-        case "appIntent": return .appIntent
-        default:
-            Log.ui.warning("AppIntentsFeature: unknown inbound source '\(raw, privacy: .public)' — defaulting to .appIntent")
-            return .appIntent
-        }
-    }
 }
 
 /// Shown by `AppIntentsFeature.makeView(env:)` when the OS is below the

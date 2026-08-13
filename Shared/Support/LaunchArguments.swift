@@ -31,6 +31,26 @@ enum LaunchArguments {
         isUITesting && CommandLine.arguments.contains("--cloud-tool-catalog-test")
     }
 
+    /// Seeds the real App Group envelope before composition begins so the UI
+    /// suite can exercise AppIntentsFeature's production read/buffer/deliver
+    /// path across the app-process boundary.
+    static var appIntentPrompt: String? {
+        guard isUITesting else { return nil }
+        return value(after: "--appintent-prompt")
+    }
+
+    /// Writes deliberately malformed App Group data for the degraded-path UI
+    /// assertion. Never active outside deterministic UI-test launches.
+    static var seedsMalformedAppIntentEnvelope: Bool {
+        isUITesting && CommandLine.arguments.contains("--appintent-malformed-envelope")
+    }
+
+    /// Selects a scripted tool-calling turn that can only complete when the
+    /// AppIntent executor is registered on InferenceService's actual registry.
+    static var runsAppIntentToolTurn: Bool {
+        isUITesting && CommandLine.arguments.contains("--appintent-tool-turn")
+    }
+
     /// The value following `--scenario <id>`, if present. Reserved for the
     /// future `ScenariosFeature` (mirrors core's `--bck-demo-scenario`);
     /// unused until that feature is ported.

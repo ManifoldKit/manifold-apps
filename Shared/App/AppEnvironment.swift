@@ -84,6 +84,11 @@ final class AppEnvironment {
         let isUITesting = LaunchArguments.isUITesting
         let configuration = ManifoldConfiguration(appName: appName, bundleIdentifier: bundleIdentifier)
 
+        // Consume the cross-process App Group slot before bootstrap work. Its
+        // payload stays buffered until the readiness-driven delivery installed
+        // below observes a loaded model.
+        await AppIntentsFeature.stageInboundPayloadDuringStartup()
+
         // Constructed before InferenceService, on both paths below, so a
         // feature confined to Shared/Features/<Name>/ has something to
         // register a tool onto — see the type doc comment above for why
@@ -94,7 +99,15 @@ final class AppEnvironment {
         // matters once a feature actually registers a tool that gets
         // called.
         let toolRegistry = ToolRegistry()
-        let toolApprovalGate = UIToolApprovalGate(policy: .askOncePerSession)
+        // The focused live-registry UI scenario auto-approves its one known
+        // SetReminderIntent call so the assertion can target the executor's
+        // actual ToolResult rather than a viewport-dependent approval button.
+        // Every ordinary app/UI-test launch retains the production policy.
+        let toolApprovalGate = UIToolApprovalGate(
+            policy: LaunchArguments.runsAppIntentToolTurn
+                ? .autoApprove
+                : .askOncePerSession
+        )
 
         let inferenceService: InferenceService
         if isUITesting {
@@ -122,6 +135,13 @@ final class AppEnvironment {
                 toolApprovalGate: toolApprovalGate
             )
         }
+
+        // AskManifoldIntent runs in the background (`openAppWhenRun == false`)
+        // and may be invoked without RootView ever appearing. Configure its
+        // process-global handler at the earliest point its service exists.
+        await AppIntentsFeature.configureBackgroundIntentHandler(
+            inferenceService: inferenceService
+        )
 
         // A ternary between two closure literals here (rather than an
         // if/else assigning to an explicitly-typed local) trips Swift 6's
@@ -194,7 +214,15 @@ final class AppEnvironment {
         if !isUITesting {
             viewModel.refreshModels()
             viewModel.autoSelectFirstRunModel()
-            viewModel.dispatchSelectedLoad()
+
+            // Startup owns this load and awaits it. Fire-and-forget
+            // dispatchSelectedLoad() allowed RootView's inbound handoff to race
+            // the unloaded-model guard in ChatViewModel.ingest(_:) (#6 review).
+            if viewModel.selectedEndpoint != nil {
+                await viewModel.loadSelectedEndpoint()
+            } else if viewModel.selectedModel != nil {
+                await viewModel.loadSelectedModel()
+            }
         }
 
         if LaunchArguments.showsAPIKeyRecovery {
@@ -205,13 +233,19 @@ final class AppEnvironment {
             )
         }
 
-        return AppEnvironment(
+        let environment = AppEnvironment(
             bootstrap: bootstrap,
             viewModel: viewModel,
             sessionManager: sessionManager,
             toolRegistry: toolRegistry,
             toolApprovalGate: toolApprovalGate
         )
+        // Install before returning the composition root to SwiftUI. The
+        // readiness stream immediately yields `.ready` for the scripted path,
+        // and holds production payloads through idle/loading until a later
+        // successful model selection.
+        AppIntentsFeature.install(into: environment)
+        return environment
     }
 
     /// Refreshes the model switcher's cloud rows after the endpoint manager
@@ -230,6 +264,15 @@ final class AppEnvironment {
     /// turn loop treats as "no more tool calls, stop" rather than an error,
     /// so running out mid-session is harmless.
     private static var uiTestTurns: [ScriptedBackend.Turn] {
+        if LaunchArguments.runsAppIntentToolTurn {
+            return [
+                .toolCall(
+                    name: "set_reminder_intent",
+                    arguments: #"{"text":"review the live registry"}"#
+                ),
+                .tokens(["Reminder", " completed", " through", " the", " live", " registry", "."]),
+            ]
+        }
         return [
             .tokens(["Hello", " from", " the", " scripted", " UI-test", " backend", "."]),
             .tokens(["Sure", ",", " happy", " to", " help", "."]),

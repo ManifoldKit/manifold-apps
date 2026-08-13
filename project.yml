@@ -38,6 +38,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.manifoldkit.Manifold
         MARKETING_VERSION: 0.1.0
         CURRENT_PROJECT_VERSION: 1
+        CODE_SIGN_ENTITLEMENTS: Mobile/Manifold.entitlements
         SWIFT_VERSION: "6.0"
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
@@ -88,6 +89,7 @@ targets:
     sources:
       - ManifoldUITests
       - Shared/Support/InboundPayload/InboundPayloadEnvelope.swift
+      - Shared/Support/InboundPayload/Concurrency/PendingPayloadBuffer.swift
     dependencies:
       - target: Manifold
       - package: ManifoldKit
