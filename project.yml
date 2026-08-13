@@ -87,8 +87,11 @@ targets:
     platform: iOS
     sources:
       - ManifoldUITests
+      - Shared/Support/InboundPayload/InboundPayloadEnvelope.swift
     dependencies:
       - target: Manifold
+      - package: ManifoldKit
+        product: ManifoldInference
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.manifoldkit.ManifoldUITests

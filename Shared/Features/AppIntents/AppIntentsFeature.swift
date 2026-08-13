@@ -1,9 +1,6 @@
 import SwiftUI
 import ManifoldInference
-
-#if canImport(ManifoldAppIntents)
 import ManifoldAppIntents
-#endif
 
 /// AppIntent ↔ ToolDefinition bridge + inbound-payload handoff
 /// (manifold-apps W2 P5).
@@ -14,19 +11,10 @@ import ManifoldAppIntents
 /// `InferenceService`), and `AppIntentToolsView`/`SetReminderIntent` (the
 /// AppIntent → chat-tool bridge demo).
 ///
-/// ## Known gaps (see PR description for full detail)
-///
-/// 1. `ManifoldAppIntents` is not yet a declared package dependency in this
-///    repo's `project.yml` — everything that needs it
-///    (`RuntimeHandler`/`AskManifoldIntent`/`AppIntentToolsView`/
-///    `SetReminderIntent`-via-executor) is gated behind
-///    `#if canImport(ManifoldAppIntents)` and compiles to nothing until
-///    that dependency is added. `AskManifoldAppIntent` and the inbound
-///    payload drain below do NOT need it and are live today.
-/// 2. `AppEnvironment.bootstrap()` constructs `InferenceService()` with no
-///    `ToolRegistry`, so `env.bootstrap.inferenceService.toolRegistry` is
-///    `nil` today even once (1) is fixed — `makeView(env:)` falls back to
-///    an explanatory view rather than a broken "Register" button.
+/// The feature receives `AppEnvironment.toolRegistry`, the same registry
+/// instance used to construct `InferenceService`. Registering an AppIntent
+/// here therefore changes the definitions advertised to subsequent chat
+/// turns instead of mutating a UI-only registry.
 enum AppIntentsFeature: AppFeature {
     static let id = "appintents"
     static let title = "App Intents"
@@ -56,25 +44,21 @@ enum AppIntentsFeature: AppFeature {
                 await env.viewModel.ingest(payload)
             }
 
-            #if canImport(ManifoldAppIntents)
             if #available(iOS 18, macOS 15, *) {
                 await ManifoldIntentConfiguration.shared.configure(
                     handler: RuntimeHandler(inferenceService: env.bootstrap.inferenceService)
                 )
             }
-            #endif
         }
     }
 
     static func makeView(env: AppEnvironment) -> AnyView {
-        #if canImport(ManifoldAppIntents)
-        if #available(iOS 26, macOS 26, *), let registry = env.bootstrap.inferenceService.toolRegistry {
+        if #available(iOS 26, macOS 26, *) {
             return AnyView(
-                AppIntentToolsView(toolRegistry: registry)
+                AppIntentToolsView(toolRegistry: env.toolRegistry)
                     .accessibilityIdentifier("appintents-feature-view")
             )
         }
-        #endif
         return AnyView(
             AppIntentsUnavailableView()
                 .accessibilityIdentifier("appintents-feature-view")
@@ -100,11 +84,10 @@ enum AppIntentsFeature: AppFeature {
         // doesn't replay the same envelope on the next launch.
         defaults.removeObject(forKey: ManifoldAppGroup.inboundKey)
 
-        // Optional decoding at a trust boundary — this data was written by
-        // a separate AppIntent invocation, not by this process — is the
-        // one carve-out from the no-`try?` rule (AGENTS.md, "Errors are
-        // visible").
-        guard let envelope = try? JSONDecoder().decode(InboundPayloadEnvelope.self, from: data) else {
+        let envelope: InboundPayloadEnvelope
+        do {
+            envelope = try JSONDecoder().decode(InboundPayloadEnvelope.self, from: data)
+        } catch {
             Log.ui.warning("AppIntentsFeature: failed to decode inbound envelope; discarding")
             return nil
         }
@@ -128,19 +111,14 @@ enum AppIntentsFeature: AppFeature {
     }
 }
 
-/// Shown by `AppIntentsFeature.makeView(env:)` when the AppIntent → tool
-/// bridge isn't reachable in this build — either `ManifoldAppIntents` isn't
-/// linked yet, the OS is below iOS 26 / macOS 26, or `AppEnvironment` hasn't
-/// wired a `ToolRegistry` into its `InferenceService`. Deliberately distinct
-/// from `NotYetPortedView`: this feature HAS been ported, it's structurally
-/// blocked on dependencies this worker doesn't own (see
-/// `AppIntentsFeature`'s doc comment).
+/// Shown by `AppIntentsFeature.makeView(env:)` when the OS is below the
+/// iOS 26 / macOS 26 availability floor of `AppIntentToolExecutor`.
 private struct AppIntentsUnavailableView: View {
     var body: some View {
         ContentUnavailableView {
             Label("App Intents", systemImage: "bolt.badge.a")
         } description: {
-            Text("The AppIntent → tool bridge needs the ManifoldAppIntents package linked in project.yml and iOS 26 / macOS 26.")
+            Text("The AppIntent → tool bridge requires iOS 26 or macOS 26.")
         }
     }
 }

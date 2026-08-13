@@ -1,8 +1,5 @@
 import AppIntents
-
-#if canImport(ManifoldAppIntents)
 import ManifoldAppIntents
-#endif
 
 /// Surfaces ``AskManifoldAppIntent`` (and, once `ManifoldAppIntents` is
 /// linked, the library-provided `AskManifoldIntent`) to Spotlight / Siri so
@@ -41,7 +38,6 @@ public struct ManifoldShortcuts: AppShortcutsProvider {
             systemImageName: "text.bubble"
         )
 
-        #if canImport(ManifoldAppIntents)
         // AskManifoldIntent is the library-provided intent that routes
         // through whatever handler the host wired via
         // ManifoldIntentConfiguration (see RuntimeHandler.swift). Unlike
@@ -55,6 +51,5 @@ public struct ManifoldShortcuts: AppShortcutsProvider {
             shortTitle: "Ask (background)",
             systemImageName: "text.bubble.fill"
         )
-        #endif
     }
 }

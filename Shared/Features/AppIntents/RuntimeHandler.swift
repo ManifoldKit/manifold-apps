@@ -1,10 +1,6 @@
 import Foundation
 import ManifoldInference
-
-#if canImport(ManifoldAppIntents)
 import ManifoldAppIntents
-
-#if canImport(AppIntents)
 import AppIntents
 
 /// Adapts the host app's `InferenceService` to `AskManifoldHandler`.
@@ -52,6 +48,3 @@ actor RuntimeHandler: AskManifoldHandler {
         "Manifold"
     }
 }
-
-#endif // canImport(AppIntents)
-#endif // canImport(ManifoldAppIntents)

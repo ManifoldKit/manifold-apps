@@ -1,7 +1,5 @@
 import SwiftUI
 import ManifoldInference
-
-#if canImport(ManifoldAppIntents)
 import ManifoldAppIntents
 
 /// Screen that registers a real AppIntent (``SetReminderIntent``) on the
@@ -16,8 +14,8 @@ import ManifoldAppIntents
 /// was constructed with (`InferenceService(toolRegistry:)`) for
 /// registration here to actually affect chat turns — see
 /// `AppIntentsFeature.makeView(env:)` for how the registry reaches this
-/// view, and its doc comment for the current gap where `AppEnvironment`
-/// does not yet construct one.
+/// view. The registration status below is read back from that registry after
+/// mutation so the screen and its UI test prove the live chat seam changed.
 @available(iOS 26, macOS 26, *)
 struct AppIntentToolsView: View {
 
@@ -26,6 +24,7 @@ struct AppIntentToolsView: View {
     let toolRegistry: ToolRegistry
 
     @State private var registered: Bool = false
+    @State private var registeredToolName: String = ""
     @State private var lastSchema: String = ""
 
     var body: some View {
@@ -41,6 +40,13 @@ struct AppIntentToolsView: View {
                     }
                     .disabled(registered)
                     .accessibilityIdentifier("appintent-tools-register-button")
+
+                    if !registeredToolName.isEmpty {
+                        Text("Registered in live chat registry: \(registeredToolName)")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("appintent-tools-registration-status")
+                    }
                 }
 
                 if !lastSchema.isEmpty {
@@ -61,6 +67,7 @@ struct AppIntentToolsView: View {
             }
             .onAppear {
                 lastSchema = AppIntentToolsView.schemaPreview()
+                refreshRegistrationStatus()
             }
         }
     }
@@ -68,20 +75,27 @@ struct AppIntentToolsView: View {
     private func register() {
         let executor = AppIntentToolExecutor(SetReminderIntent.self)
         toolRegistry.register(executor)
-        registered = true
+        refreshRegistrationStatus(expectedName: executor.definition.name)
         lastSchema = AppIntentToolsView.schemaPreview()
+    }
+
+    private func refreshRegistrationStatus(expectedName: String = "set_reminder_intent") {
+        registered = toolRegistry.contains(name: expectedName)
+        registeredToolName = toolRegistry.definitions
+            .first(where: { $0.name == expectedName })?
+            .name ?? ""
     }
 
     private static func schemaPreview() -> String {
         let executor = AppIntentToolExecutor(SetReminderIntent.self)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        if let data = try? encoder.encode(executor.definition.parameters),
-           let string = String(data: data, encoding: .utf8) {
-            return string
+        do {
+            let data = try encoder.encode(executor.definition.parameters)
+            return String(data: data, encoding: .utf8) ?? "<schema is not UTF-8>"
+        } catch {
+            Log.ui.error("AppIntentToolsView: failed to render schema preview: \(String(describing: error), privacy: .public)")
+            return "<unable to render schema>"
         }
-        return "<unable to render schema>"
     }
 }
-
-#endif // canImport(ManifoldAppIntents)

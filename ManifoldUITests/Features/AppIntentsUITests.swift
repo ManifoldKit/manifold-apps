@@ -1,71 +1,22 @@
 import XCTest
+import ManifoldInference
 
-/// AppIntents feature coverage: the App Group envelope's wire-format
-/// contract (mirrored locally — see below), plus a UI-level assertion that
-/// the sidebar's "App Intents" row renders `AppIntentsFeature`'s real
-/// content rather than the shared `NotYetPortedView` stub every other
-/// not-yet-ported feature still shows.
-///
-/// ## Why a local envelope mirror, not the real `InboundPayloadEnvelope`
-///
-/// Core's `InboundPayloadEnvelopeTests` (`Example/AdvancedUITests` in
-/// ManifoldKit) compiles the real `InboundPayloadEnvelope.swift` directly
-/// into its UI Tests bundle — that repo's `Example/AdvancedUITests` target
-/// lists the file in its sources. Reproducing that here needs
-/// `Shared/Support/InboundPayload/InboundPayloadEnvelope.swift` (plus a
-/// `ManifoldInference` product dependency, for `MessagePart`) added to this
-/// repo's `ManifoldUITests` target in `project.yml` — a change outside this
-/// feature's ownership (`Shared/Features/AppIntents/**` + this file only;
-/// reported to `main`). Until that lands, `EnvelopeMirror` below asserts
-/// the same wire contract (prompt/attachments/source round-trip, legacy
-/// no-attachments-key decode, attachments-key presence when non-empty)
-/// against a structurally identical but independently-declared type — a
-/// regression in the real type's `CodingKeys` or default-decode fallback
-/// is likely, though not guaranteed, to be caught here too. This is
-/// coverage-by-mirror, not a substitute for testing the real type.
+/// AppIntents feature coverage: the real App Group envelope wire contract,
+/// plus UI-level assertions that the feature renders its live content and
+/// registers `SetReminderIntent` into the chat runtime's actual registry.
 final class AppIntentsUITests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
     }
 
-    // MARK: - Envelope wire-format mirror
-
-    /// Field-for-field mirror of `InboundPayloadEnvelope`: same property
-    /// names, same `CodingKeys`, same default-empty `attachments` decode
-    /// fallback. `attachments` is `[String]` here rather than
-    /// `[MessagePart]` — `MessagePart` isn't visible in this target (see
-    /// the type-level doc comment) — but every assertion below exercises
-    /// the envelope's own key handling, not `MessagePart`'s Codable
-    /// implementation, so the narrower element type doesn't weaken them.
-    private struct EnvelopeMirror: Codable, Equatable {
-        var prompt: String
-        var attachments: [String]
-        var source: String
-
-        init(prompt: String, attachments: [String] = [], source: String) {
-            self.prompt = prompt
-            self.attachments = attachments
-            self.source = source
-        }
-
-        private enum CodingKeys: String, CodingKey {
-            case prompt, attachments, source
-        }
-
-        init(from decoder: any Decoder) throws {
-            let container = try decoder.container(keyedBy: CodingKeys.self)
-            self.prompt = try container.decode(String.self, forKey: .prompt)
-            self.attachments = try container.decodeIfPresent([String].self, forKey: .attachments) ?? []
-            self.source = try container.decode(String.self, forKey: .source)
-        }
-    }
+    // MARK: - Real envelope wire format
 
     func test_envelope_roundTripsPromptAndSource() throws {
-        let envelope = EnvelopeMirror(prompt: "summarize this article", attachments: [], source: "appIntent")
+        let envelope = InboundPayloadEnvelope(prompt: "summarize this article", attachments: [], source: "appIntent")
 
         let data = try JSONEncoder().encode(envelope)
-        let decoded = try JSONDecoder().decode(EnvelopeMirror.self, from: data)
+        let decoded = try JSONDecoder().decode(InboundPayloadEnvelope.self, from: data)
 
         XCTAssertEqual(decoded.prompt, "summarize this article")
         XCTAssertEqual(decoded.source, "appIntent")
@@ -73,11 +24,15 @@ final class AppIntentsUITests: XCTestCase {
     }
 
     func test_envelope_roundTripsAttachmentsEndToEnd() throws {
-        let attachments = ["relevant context", "sig-abc", "image/png"]
-        let envelope = EnvelopeMirror(prompt: "act on the attached payload", attachments: attachments, source: "shareExtension")
+        let attachments: [MessagePart] = [
+            .text("relevant context"),
+            .image(data: Data([0x89, 0x50, 0x4E, 0x47]), mimeType: "image/png"),
+            .thinking("model reasoning carried verbatim", signature: "sig-abc"),
+        ]
+        let envelope = InboundPayloadEnvelope(prompt: "act on the attached payload", attachments: attachments, source: "shareExtension")
 
         let data = try JSONEncoder().encode(envelope)
-        let decoded = try JSONDecoder().decode(EnvelopeMirror.self, from: data)
+        let decoded = try JSONDecoder().decode(InboundPayloadEnvelope.self, from: data)
 
         XCTAssertEqual(decoded.prompt, "act on the attached payload")
         XCTAssertEqual(decoded.source, "shareExtension")
@@ -89,7 +44,7 @@ final class AppIntentsUITests: XCTestCase {
         // rather than throwing on a missing key.
         let legacyJSON = #"{"prompt":"hello","source":"appIntent"}"#.data(using: .utf8)!
 
-        let decoded = try JSONDecoder().decode(EnvelopeMirror.self, from: legacyJSON)
+        let decoded = try JSONDecoder().decode(InboundPayloadEnvelope.self, from: legacyJSON)
 
         XCTAssertEqual(decoded.prompt, "hello")
         XCTAssertEqual(decoded.source, "appIntent")
@@ -101,7 +56,7 @@ final class AppIntentsUITests: XCTestCase {
         // serialise under the literal key `"attachments"` so
         // `AppIntentsFeature.readInboundEnvelope()` (and any future
         // out-of-process consumer) can find it.
-        let envelope = EnvelopeMirror(prompt: "p", attachments: ["a"], source: "appIntent")
+        let envelope = InboundPayloadEnvelope(prompt: "p", attachments: [.text("a")], source: "appIntent")
 
         let data = try JSONEncoder().encode(envelope)
         let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -133,5 +88,35 @@ final class AppIntentsUITests: XCTestCase {
             waitForElement(featureView, timeout: 5),
             "AppIntentsFeature.makeView(env:) should render a view carrying the 'appintents-feature-view' accessibility identifier — NotYetPortedView (and any other placeholder) never sets this identifier"
         )
+    }
+
+    /// Drives the real registration button and asserts the screen read the
+    /// new definition back from the `ToolRegistry` owned by `AppEnvironment`.
+    /// A local Boolean flip cannot satisfy this assertion because the status
+    /// label is populated from `toolRegistry.definitions` after registration.
+    func test_registerSetReminder_addsDefinitionToLiveChatRegistry() throws {
+        let app = launchApp()
+        showSidebarIfNeeded(app: app)
+
+        let row = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == 'App Intents'"))
+            .firstMatch
+        XCTAssertTrue(waitForElement(row, timeout: 5), "Sidebar should show an 'App Intents' row")
+        row.tap()
+
+        let registerButton = app.buttons["appintent-tools-register-button"]
+        XCTAssertTrue(
+            waitForElement(registerButton, timeout: 5),
+            "The live AppIntent tool screen should expose its registration button"
+        )
+        registerButton.tap()
+
+        let status = app.staticTexts["appintent-tools-registration-status"]
+        XCTAssertTrue(
+            waitForElement(status, timeout: 5),
+            "Registration should be confirmed by reading set_reminder_intent back from the live chat ToolRegistry"
+        )
+        XCTAssertEqual(status.label, "Registered in live chat registry: set_reminder_intent")
+        XCTAssertFalse(registerButton.isEnabled, "A registered tool should not be registered twice")
     }
 }

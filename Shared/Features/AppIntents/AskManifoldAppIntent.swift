@@ -65,13 +65,11 @@ public struct AskManifoldAppIntent: AppIntent {
             source: "appIntent"
         )
         if let defaults = UserDefaults(suiteName: ManifoldAppGroup.identifier) {
-            // Optional encoding at a trust boundary — this process is about
-            // to hand off to a separate app-process read, so a failure here
-            // has no recovery path other than "the handoff doesn't happen."
-            if let encoded = try? JSONEncoder().encode(envelope) {
+            do {
+                let encoded = try JSONEncoder().encode(envelope)
                 defaults.set(encoded, forKey: ManifoldAppGroup.inboundKey)
-            } else {
-                Log.ui.error("AskManifoldAppIntent: failed to encode inbound envelope")
+            } catch {
+                Log.ui.error("AskManifoldAppIntent: failed to encode inbound envelope: \(String(describing: error), privacy: .public)")
             }
         } else {
             Log.ui.error("AskManifoldAppIntent: could not open App Group '\(ManifoldAppGroup.identifier, privacy: .public)' — is the entitlement configured?")
