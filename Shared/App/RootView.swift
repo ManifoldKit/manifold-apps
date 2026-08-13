@@ -96,16 +96,18 @@ struct RootView: View {
             }
         }
         .onChange(of: selectedFeatureID) { oldValue, newValue in
-            #if os(iOS)
-            if horizontalSizeClass == .compact,
-               newValue != nil {
-                preferredCompactColumn = .detail
-                columnVisibility = .detailOnly
-            }
-            #endif
+            if newValue != nil { showCompactDetail() }
 
             guard oldValue == CloudFeature.id else { return }
             Task { await env.refreshAvailableEndpoints() }
+        }
+        .onChange(of: env.sessionManager.activeSession) { _, newSession in
+            guard let newSession else { return }
+            selectedFeatureID = "chat"
+            showCompactDetail()
+
+            guard env.viewModel.activeSession?.id != newSession.id else { return }
+            Task { await env.viewModel.switchToSession(newSession) }
         }
         #if os(iOS)
         .onChange(of: horizontalSizeClass) { _, newSizeClass in
@@ -194,6 +196,14 @@ struct RootView: View {
             },
             onFixEndpoint: { _ in showModelManagement = true }
         )
+    }
+
+    private func showCompactDetail() {
+        #if os(iOS)
+        guard horizontalSizeClass == .compact else { return }
+        preferredCompactColumn = .detail
+        columnVisibility = .detailOnly
+        #endif
     }
 
     private func createSession() {

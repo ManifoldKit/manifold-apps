@@ -125,31 +125,63 @@ final class SmokeUITests: XCTestCase {
             return
         }
 
-        // Create a second session if needed. On compact, the tap activates
-        // the new session and collapses to the detail column, so re-reveal
-        // the sidebar before checking the row count.
-        if app.cells.count < 2 {
+        // Create a second real session when needed. Its activation may
+        // collapse compact navigation to the chat detail, so reveal the
+        // sidebar again before querying the session rows.
+        if sessionRows().count < 2 {
             newChatButton.tap()
             showSidebarIfNeeded(app: app)
-            _ = app.cells.element(boundBy: 1).waitForExistence(timeout: 3)
+            XCTAssertTrue(
+                waitForSessionRows(count: 2),
+                "Creating a session should leave two selectable session rows"
+            )
         }
 
-        guard app.cells.count >= 2 else {
+        guard sessionRows().count >= 2 else {
             captureScreenshot(name: "Not-Enough-Sessions")
             XCTFail("Need at least 2 sessions for switching test")
             return
         }
 
-        let firstSession = app.cells.element(boundBy: 0)
-        firstSession.tap()
-        captureScreenshot(name: "Switch-First-Session")
+        let toolsRow = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == 'Tools'"))
+            .firstMatch
+        XCTAssertTrue(waitForElement(toolsRow, timeout: 5), "Sidebar should list Tools")
+        toolsRow.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["tools-browser"].waitForExistence(timeout: 5),
+            "Selecting Tools should replace the chat detail before the session switch"
+        )
 
         showSidebarIfNeeded(app: app)
 
-        let secondSession = app.cells.element(boundBy: 1)
-        if secondSession.waitForExistence(timeout: 3) {
-            secondSession.tap()
-            captureScreenshot(name: "Switch-Second-Session")
+        guard let inactiveSession = sessionRows().first(where: { !$0.isSelected }) else {
+            captureScreenshot(name: "No-Inactive-Session")
+            XCTFail("Need a non-active session row; tapping the active session would not exercise the switch")
+            return
         }
+
+        inactiveSession.tap()
+        XCTAssertTrue(
+            waitForChatInputReady(app: app, timeout: 10),
+            "Selecting a different session while Tools is displayed should restore the live chat detail"
+        )
+        captureScreenshot(name: "Switch-Session-From-Tools")
+    }
+
+    private func sessionRows() -> [XCUIElement] {
+        app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier == 'session-row'"))
+            .allElementsBoundByIndex
+    }
+
+    private func waitForSessionRows(count: Int, timeout: TimeInterval = 5) -> Bool {
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate { [weak self] _, _ in
+                (self?.sessionRows().count ?? 0) >= count
+            },
+            object: nil
+        )
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
     }
 }
