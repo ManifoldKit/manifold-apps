@@ -35,6 +35,7 @@ final class AppEnvironment {
     let sessionManager: SessionManagerViewModel
     let toolRegistry: ToolRegistry
     let toolApprovalGate: UIToolApprovalGate
+    let backgroundIntentHandlerConfiguredAtStartup: Bool
     var themePreset: ThemingPreset = .standard
 
     var theme: ManifoldTheme {
@@ -46,13 +47,15 @@ final class AppEnvironment {
         viewModel: ChatViewModel,
         sessionManager: SessionManagerViewModel,
         toolRegistry: ToolRegistry,
-        toolApprovalGate: UIToolApprovalGate
+        toolApprovalGate: UIToolApprovalGate,
+        backgroundIntentHandlerConfiguredAtStartup: Bool
     ) {
         self.bootstrap = bootstrap
         self.viewModel = viewModel
         self.sessionManager = sessionManager
         self.toolRegistry = toolRegistry
         self.toolApprovalGate = toolApprovalGate
+        self.backgroundIntentHandlerConfiguredAtStartup = backgroundIntentHandlerConfiguredAtStartup
     }
 
     /// Builds the composition root.
@@ -131,7 +134,7 @@ final class AppEnvironment {
         // AskManifoldIntent runs in the background (`openAppWhenRun == false`)
         // and may be invoked without RootView ever appearing. Configure its
         // process-global handler at the earliest point its service exists.
-        await AppIntentsFeature.configureBackgroundIntentHandler(
+        let backgroundIntentHandlerConfiguredAtStartup = await AppIntentsFeature.configureBackgroundIntentHandler(
             inferenceService: inferenceService
         )
 
@@ -230,7 +233,8 @@ final class AppEnvironment {
             viewModel: viewModel,
             sessionManager: sessionManager,
             toolRegistry: toolRegistry,
-            toolApprovalGate: toolApprovalGate
+            toolApprovalGate: toolApprovalGate,
+            backgroundIntentHandlerConfiguredAtStartup: backgroundIntentHandlerConfiguredAtStartup
         )
         // Install before returning the composition root to SwiftUI. The
         // readiness stream immediately yields `.ready` for the scripted path,

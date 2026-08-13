@@ -36,12 +36,14 @@ enum AppIntentsFeature: AppFeature {
     /// its InferenceService. This intentionally precedes session restoration,
     /// model loading, and RootView construction: background AskManifoldIntent
     /// invocations do not open the app and cannot depend on a view appearing.
-    static func configureBackgroundIntentHandler(inferenceService: InferenceService) async {
+    static func configureBackgroundIntentHandler(inferenceService: InferenceService) async -> Bool {
         if #available(iOS 18, macOS 15, *) {
             await ManifoldIntentConfiguration.shared.configure(
                 handler: RuntimeHandler(inferenceService: inferenceService)
             )
+            return await ManifoldIntentConfiguration.shared.handler != nil
         }
+        return false
     }
 
     /// Consumes the App Group slot before the potentially long bootstrap. The
@@ -84,6 +86,7 @@ enum AppIntentsFeature: AppFeature {
                 AppIntentToolsView(
                     toolRegistry: env.toolRegistry,
                     inferenceService: env.bootstrap.inferenceService,
+                    backgroundHandlerConfiguredAtStartup: env.backgroundIntentHandlerConfiguredAtStartup,
                     inboundHandoffStatus: inboundHandoffStatus
                 )
                     .accessibilityIdentifier("appintents-feature-view")

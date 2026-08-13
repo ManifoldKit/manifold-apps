@@ -229,7 +229,7 @@ final class AppIntentsUITests: XCTestCase {
         )
         XCTAssertEqual(
             app.staticTexts["appintent-background-handler-status"].label,
-            "Background intent handler configured"
+            "Background intent handler configured during bootstrap"
         )
         #if os(iOS)
         XCTAssertEqual(

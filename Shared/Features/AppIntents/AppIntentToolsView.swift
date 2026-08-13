@@ -24,12 +24,12 @@ struct AppIntentToolsView: View {
 
     let toolRegistry: ToolRegistry
     let inferenceService: InferenceService
+    let backgroundHandlerConfiguredAtStartup: Bool
     let inboundHandoffStatus: String
 
     @State private var registered: Bool = false
     @State private var registeredToolName: String = ""
     @State private var lastSchema: String = ""
-    @State private var backgroundHandlerConfigured = false
 
     var body: some View {
         NavigationStack {
@@ -65,10 +65,10 @@ struct AppIntentToolsView: View {
                     .accessibilityIdentifier("appintent-chat-registry-status")
 
                     Label(
-                        backgroundHandlerConfigured
-                            ? "Background intent handler configured"
+                        backgroundHandlerConfiguredAtStartup
+                            ? "Background intent handler configured during bootstrap"
                             : "Background intent handler unavailable",
-                        systemImage: backgroundHandlerConfigured
+                        systemImage: backgroundHandlerConfiguredAtStartup
                             ? "checkmark.circle.fill"
                             : "xmark.octagon.fill"
                     )
@@ -111,9 +111,6 @@ struct AppIntentToolsView: View {
             .onAppear {
                 lastSchema = AppIntentToolsView.schemaPreview()
                 refreshRegistrationStatus()
-            }
-            .task {
-                backgroundHandlerConfigured = await ManifoldIntentConfiguration.shared.handler != nil
             }
         }
     }
