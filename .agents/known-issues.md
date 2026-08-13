@@ -27,14 +27,15 @@ title, New Chat button, or a row with the explicit `session-row` identifier;
 keep the generic-cell fallback only for lookup after the sidebar is known to
 be visible.
 
-## Existing sidebar rows can still be offscreen and non-hittable
+## Feature selection can leave the compact sidebar masking its detail
 
-On compact iPhones, a lower `NavigationSplitView` sidebar row may satisfy an
-XCUITest existence query while remaining outside the visible viewport. Calling
-`tap()` on that element does not navigate, so later detail assertions fail and
-application-level swipes can misleadingly appear to target the detail while
-they are actually scrolling the still-open sidebar. After confirming the
-sidebar itself is visible, boundedly scroll until the exact labelled row is
-hittable, assert hittability, tap it, and then assert a stable detail element
-before continuing. Do not treat `exists` alone as proof that navigation is
-possible, and do not fall back to an arbitrary cell.
+On compact iPhones, tapping an exact, hittable `NavigationSplitView` sidebar
+row can synthesize successfully while the sidebar overlay remains open and the
+selected detail stays absent from the accessibility tree. Later detail
+assertions then fail, and application-level swipes misleadingly manipulate the
+still-open sidebar. Keep exact-row existence and hittability guards (boundedly
+scroll first when a lower row is genuinely offscreen), then tap the row and
+assert a detail-only element. If it is absent, dismiss the overlay with an
+outside-sidebar tap and a swipe-left fallback before the final bounded detail
+assertion. Do not infer successful navigation from the row tap alone, and do
+not fall back to an arbitrary cell.

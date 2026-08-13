@@ -110,9 +110,16 @@ final class ThemingUITests: XCTestCase {
         row.tap()
 
         let readout = app.descendants(matching: .any)["theming-corner-radius-label"]
+        if !waitForElement(readout, timeout: 1) {
+            let outsideSidebar = app.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.2))
+            outsideSidebar.tap()
+        }
+        if !waitForElement(readout, timeout: 1) {
+            app.swipeLeft()
+        }
         XCTAssertTrue(
             waitForElement(readout, timeout: 5),
-            "Tapping the Theming row should open the Theming detail"
+            "Tapping the Theming row and dismissing the compact sidebar should reveal its detail"
         )
     }
 }
