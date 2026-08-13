@@ -10,6 +10,15 @@ struct ToolsBrowserView: View {
     @State private var isPolicyPresented = false
 
     var body: some View {
+        // Establish Observation tracking for model/backend switches; the
+        // registry itself is MainActor-isolated rather than @Observable.
+        let _ = env.viewModel.activeBackendName
+        let advertised = env.toolRegistry.advertisedDefinitions
+        let registered = env.toolRegistry.definitions
+        let hidden = registered.filter { definition in
+            !advertised.contains(where: { $0.name == definition.name })
+        }
+
         List {
             Section("Approval") {
                 Button {
@@ -26,21 +35,29 @@ struct ToolsBrowserView: View {
             }
 
             Section {
-                ForEach(env.toolRegistry.definitions, id: \.name) { definition in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(definition.name)
-                            .font(.body.monospaced())
-                        Text(definition.description)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityIdentifier("tool-row-\(definition.name)")
+                Text("\(advertised.count) of \(registered.count) tools advertised")
+                    .font(.subheadline.weight(.semibold))
+                    .accessibilityIdentifier("tool-advertisement-summary")
+
+                ForEach(advertised, id: \.name) { definition in
+                    toolRow(definition, identifierPrefix: "tool-row")
                 }
             } header: {
-                Text("Registered tools")
+                Text("Advertised tools")
             } footer: {
-                Text("These are the live definitions advertised to the active backend and dispatched by this app's ToolRegistry.")
+                Text("Local and unknown backends receive a curated maximum of five definitions. Known cloud backends receive the full reference catalog.")
+            }
+
+            if !hidden.isEmpty {
+                Section {
+                    ForEach(hidden, id: \.name) { definition in
+                        toolRow(definition, identifierPrefix: "tool-registered-row")
+                    }
+                } header: {
+                    Text("Registered for cloud and scenarios")
+                } footer: {
+                    Text("These executors remain installed for deliberate cloud and scenario use, but their schemas are not offered to the active local model.")
+                }
             }
         }
         .navigationTitle("Tools")
@@ -49,6 +66,18 @@ struct ToolsBrowserView: View {
             ToolPolicyView()
                 .environment(env.viewModel)
         }
+    }
+
+    private func toolRow(_ definition: ToolDefinition, identifierPrefix: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(definition.name)
+                .font(.body.monospaced())
+            Text(definition.description)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("\(identifierPrefix)-\(definition.name)")
     }
 
     private var policyLabel: String {

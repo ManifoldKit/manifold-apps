@@ -17,11 +17,18 @@ enum LaunchArguments {
         isUITesting && CommandLine.arguments.contains("--show-api-key-recovery")
     }
 
-    /// Selects the deterministic approval-flow script and inline approval
+    /// Selects the history-aware approval-flow backend and inline approval
     /// presentation used by `ToolsUITests`. Kept opt-in so the ordinary smoke
     /// tests retain their token-only scripted turns.
     static var runsToolApprovalFlow: Bool {
         isUITesting && CommandLine.arguments.contains("--tool-approval-test")
+    }
+
+    /// Gives the deterministic backend a cloud identity so the Tools browser
+    /// can prove the full reference catalog remains available off local-model
+    /// paths without contacting a live provider.
+    static var showsCloudToolCatalog: Bool {
+        isUITesting && CommandLine.arguments.contains("--cloud-tool-catalog-test")
     }
 
     /// The value following `--scenario <id>`, if present. Reserved for the

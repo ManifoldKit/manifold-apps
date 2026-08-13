@@ -27,6 +27,19 @@ enum ManifoldToolset {
         "write_file"
     ] + FailureTools.names
 
+    /// The deliberately small catalog offered to local and unknown backends.
+    /// Small instruct models lose reliability as the number of tool schemas
+    /// grows; ManifoldKit's consumer guidance sets five as the practical
+    /// ceiling for local 3B–8B models. Executors outside this set remain
+    /// registered for dispatch and become advertised on known cloud paths.
+    static let localAdvertisedNames: Set<String> = [
+        "calc",
+        "now",
+        "read_file",
+        "sample_repo_search",
+        "write_file",
+    ]
+
     /// Registers the full reference toolset on `registry`.
     ///
     /// Runs synchronously on the main actor because `ToolRegistry` is
@@ -49,5 +62,19 @@ enum ManifoldToolset {
         registry.register(SampleRepoSearchTool.makeExecutor(root: root))
         registry.register(WriteFileTool.makeExecutor(root: root))
         FailureTools.register(on: registry)
+    }
+
+    /// Curates the schemas offered to the active model without removing any
+    /// executor from the registry. OpenAI and Claude paths receive the full
+    /// reference/failure catalog; local and unrecognised identities stay at
+    /// the conservative five-tool ceiling.
+    @MainActor
+    static func updateAdvertisement(on registry: ToolRegistry, backendName: String?) {
+        let backend = backendName.flatMap(BackendName.parse)
+        if backend == .openAI || backend == .claude {
+            registry.advertisedToolNames = nil
+        } else {
+            registry.advertisedToolNames = localAdvertisedNames
+        }
     }
 }

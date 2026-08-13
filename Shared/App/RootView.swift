@@ -91,6 +91,9 @@ struct RootView: View {
             guard oldValue == CloudFeature.id else { return }
             Task { await env.refreshAvailableEndpoints() }
         }
+        .onChange(of: env.viewModel.activeBackendName, initial: true) { _, _ in
+            ToolsFeature.updateAdvertisement(in: env)
+        }
     }
 
     private var sidebar: some View {

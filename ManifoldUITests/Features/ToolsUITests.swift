@@ -1,6 +1,6 @@
 import XCTest
 
-/// Drives a real scripted tool call through the app's live ToolRegistry and
+/// Drives a real backend tool call through the app's live ToolRegistry and
 /// UIToolApprovalGate, then proves the approved result is paired back into the
 /// transcript before the model's final response renders.
 final class ToolsUITests: XCTestCase {
@@ -9,11 +9,18 @@ final class ToolsUITests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
-        app = launchApp(additionalArguments: ["--tool-approval-test"])
     }
 
     func testApprovedWriteToolCompletesAndReturnsResult() throws {
+        app = launchApp(additionalArguments: ["--tool-approval-test"])
         navigateToTools()
+
+        let advertisementSummary = app.descendants(matching: .any)["tool-advertisement-summary"]
+        XCTAssertTrue(advertisementSummary.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            advertisementSummary.label.contains("5 of 8 tools advertised"),
+            "The Ollama-identity approval backend should receive the five-tool local catalog"
+        )
 
         let policyButton = app.buttons["tools-policy-button"]
         XCTAssertTrue(
@@ -46,7 +53,7 @@ final class ToolsUITests: XCTestCase {
         navigateToChat()
         XCTAssertTrue(
             waitForChatInputReady(app: app, timeout: 30),
-            "The fixed scripted backend should make chat ready without a model load"
+            "The fixed history-aware backend should make chat ready without a model load"
         )
 
         guard let input = findMessageInput(app: app) else {
@@ -64,7 +71,7 @@ final class ToolsUITests: XCTestCase {
         let approvalTitle = app.descendants(matching: .any)["approval-sheet-title"]
         XCTAssertTrue(
             approvalTitle.waitForExistence(timeout: 10),
-            "The scripted write_file call should suspend on UIToolApprovalGate and present approval UI"
+            "The backend's write_file call should suspend on UIToolApprovalGate and present approval UI"
         )
         let approveButton = app.buttons["approval-sheet-approve-button"]
         XCTAssertTrue(approveButton.exists && approveButton.isHittable, "Approval UI should expose a live Approve action")
@@ -77,7 +84,7 @@ final class ToolsUITests: XCTestCase {
         )
 
         let finalReply = app.descendants(matching: .any).matching(
-            NSPredicate(format: "label CONTAINS[c] 'Tool write approved and completed'")
+            NSPredicate(format: "label CONTAINS[c] 'Tool result history and exact file bytes verified.'")
         ).firstMatch
         XCTAssertTrue(
             finalReply.waitForExistence(timeout: 10),
@@ -85,6 +92,28 @@ final class ToolsUITests: XCTestCase {
         )
 
         captureScreenshot(name: "Tools-Approved-Completed")
+    }
+
+    func testCloudBackendAdvertisesFullReferenceCatalog() {
+        app = launchApp(additionalArguments: ["--cloud-tool-catalog-test"])
+        navigateToTools()
+
+        let advertisementSummary = app.descendants(matching: .any)["tool-advertisement-summary"]
+        XCTAssertTrue(advertisementSummary.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            advertisementSummary.label.contains("8 of 8 tools advertised"),
+            "Known cloud identities should retain the complete reference and failure-tool catalog"
+        )
+
+        let rateLimitedTool = app.descendants(matching: .any)["tool-row-fakeRateLimited"]
+        let toolsBrowser = app.descendants(matching: .any)["tools-browser"]
+        for _ in 0..<8 where !rateLimitedTool.exists {
+            toolsBrowser.swipeUp()
+        }
+        XCTAssertTrue(
+            rateLimitedTool.waitForExistence(timeout: 3),
+            "The full cloud catalog should deliberately preserve failure tools"
+        )
     }
 
     private func navigateToTools() {

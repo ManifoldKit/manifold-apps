@@ -9,6 +9,14 @@ enum ToolsFeature: AppFeature {
 
     static func install(into env: AppEnvironment) {
         ManifoldToolset.register(on: env.toolRegistry)
+        updateAdvertisement(in: env)
+    }
+
+    static func updateAdvertisement(in env: AppEnvironment) {
+        ManifoldToolset.updateAdvertisement(
+            on: env.toolRegistry,
+            backendName: env.viewModel.activeBackendName
+        )
     }
 
     static func makeView(env: AppEnvironment) -> AnyView {

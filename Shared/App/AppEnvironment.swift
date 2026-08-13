@@ -58,10 +58,10 @@ final class AppEnvironment {
     /// Builds the composition root.
     ///
     /// Under `--uitesting` (``LaunchArguments/isUITesting``) this swaps in a
-    /// deterministic `ScriptedBackend` (`ManifoldTools`) and an in-memory
+    /// deterministic test backend and an in-memory
     /// SwiftData store instead of live backends + on-disk persistence —
     /// mirrors core's `Example/Advanced/ManifoldDemoApp.swift` `init()`
-    /// wiring (lines 96–119). `ScriptedBackend`'s fixed-backend
+    /// wiring (lines 96–119). The fixed-backend
     /// `InferenceService` initializer marks the model loaded immediately (no
     /// `loadModel` step), so the composer is enabled as soon as bootstrap
     /// finishes — no `dispatchSelectedLoad()` call is needed on that path,
@@ -98,10 +98,20 @@ final class AppEnvironment {
 
         let inferenceService: InferenceService
         if isUITesting {
-            let scripted = ScriptedBackend(turns: uiTestTurns)
+            let backend: any InferenceBackend
+            let backendName: String
+            if LaunchArguments.runsToolApprovalFlow {
+                backend = ToolApprovalTestBackend(root: ManifoldToolRoot.resolve())
+                backendName = BackendName.ollama.rawValue
+            } else {
+                backend = ScriptedBackend(turns: uiTestTurns)
+                backendName = LaunchArguments.showsCloudToolCatalog
+                    ? BackendName.openAI.rawValue
+                    : "ScriptedUITest"
+            }
             inferenceService = InferenceService(
-                backend: scripted,
-                name: "ScriptedUITest",
+                backend: backend,
+                name: backendName,
                 modelName: "scripted-ui",
                 toolRegistry: toolRegistry,
                 toolApprovalGate: toolApprovalGate
@@ -220,16 +230,6 @@ final class AppEnvironment {
     /// turn loop treats as "no more tool calls, stop" rather than an error,
     /// so running out mid-session is harmless.
     private static var uiTestTurns: [ScriptedBackend.Turn] {
-        if LaunchArguments.runsToolApprovalFlow {
-            return [
-                .toolCall(
-                    name: "write_file",
-                    arguments: #"{"path":"approval/result.txt","content":"approved through the live UI gate"}"#
-                ),
-                .tokens(["Tool", " write", " approved", " and", " completed", "."]),
-            ]
-        }
-
         return [
             .tokens(["Hello", " from", " the", " scripted", " UI-test", " backend", "."]),
             .tokens(["Sure", ",", " happy", " to", " help", "."]),
