@@ -195,6 +195,13 @@ final class AppIntentsUITests: XCTestCase {
         XCTAssertTrue(waitForElement(sendButton, timeout: 3) && sendButton.isEnabled)
         sendButton.tap()
 
+        let approveButton = app.buttons["approval-sheet-approve-button"]
+        XCTAssertTrue(
+            waitForElement(approveButton, timeout: 10),
+            "InferenceService should route the registered AppIntent call through the shared production approval sheet"
+        )
+        approveButton.tap()
+
         let toolResult = app.descendants(matching: .any).matching(
             NSPredicate(format: "label CONTAINS[c] 'Reminder noted: review the live registry'")
         ).firstMatch

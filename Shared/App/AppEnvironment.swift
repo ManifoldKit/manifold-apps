@@ -99,15 +99,7 @@ final class AppEnvironment {
         // matters once a feature actually registers a tool that gets
         // called.
         let toolRegistry = ToolRegistry()
-        // The focused live-registry UI scenario auto-approves its one known
-        // SetReminderIntent call so the assertion can target the executor's
-        // actual ToolResult rather than a viewport-dependent approval button.
-        // Every ordinary app/UI-test launch retains the production policy.
-        let toolApprovalGate = UIToolApprovalGate(
-            policy: LaunchArguments.runsAppIntentToolTurn
-                ? .autoApprove
-                : .askOncePerSession
-        )
+        let toolApprovalGate = UIToolApprovalGate(policy: .askOncePerSession)
 
         let inferenceService: InferenceService
         if isUITesting {
