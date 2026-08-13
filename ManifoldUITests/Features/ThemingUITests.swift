@@ -27,7 +27,7 @@ final class ThemingUITests: XCTestCase {
 
         let cornerRadiusLabel = app.descendants(matching: .any)["theming-corner-radius-label"]
         XCTAssertTrue(
-            waitForElement(cornerRadiusLabel, timeout: 5),
+            scrollUpUntilExists(cornerRadiusLabel),
             "Theming showcase should render its live-preview corner-radius readout"
         )
 
@@ -38,13 +38,17 @@ final class ThemingUITests: XCTestCase {
         )
 
         let picker = app.descendants(matching: .any)["theming-preset-picker"]
-        XCTAssertTrue(waitForElement(picker, timeout: 5), "Theming showcase should expose its preset picker")
+        XCTAssertTrue(scrollDownUntilHittable(picker), "Theming showcase should expose its preset picker")
 
         let classicOption = app.buttons["Classic"]
-        XCTAssertTrue(waitForElement(classicOption, timeout: 5), "Preset picker should offer a Classic segment")
+        XCTAssertTrue(scrollDownUntilHittable(classicOption), "Preset picker should offer a Classic segment")
         classicOption.tap()
 
         let updatedLabel = app.descendants(matching: .any)["theming-corner-radius-label"]
+        XCTAssertTrue(
+            scrollUpUntilExists(updatedLabel),
+            "Theming showcase should keep its live-preview readout after changing presets"
+        )
         let updatedValue = updatedLabel.label
         XCTAssertTrue(
             updatedValue.contains("16pt"),
@@ -70,7 +74,12 @@ final class ThemingUITests: XCTestCase {
         XCTAssertTrue(waitForElement(themingRow, timeout: 5), "Sidebar should still list a Theming row")
         themingRow.tap()
 
-        let restoredValue = app.descendants(matching: .any)["theming-corner-radius-label"].label
+        let restoredLabel = app.descendants(matching: .any)["theming-corner-radius-label"]
+        XCTAssertTrue(
+            scrollUpUntilExists(restoredLabel),
+            "Theming showcase should restore its live-preview readout after reconstruction"
+        )
+        let restoredValue = restoredLabel.label
         XCTAssertTrue(
             restoredValue.contains("16pt"),
             "Classic must remain selected after the feature view is reconstructed, got: \(restoredValue)"
@@ -90,5 +99,29 @@ final class ThemingUITests: XCTestCase {
         let row = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'Theming'")).firstMatch
         XCTAssertTrue(waitForElement(row, timeout: 5), "Sidebar should list a Theming row")
         row.tap()
+    }
+
+    /// Compact CI devices do not expose descendants below a `ScrollView`'s
+    /// viewport to XCUITest until the content has actually been scrolled.
+    /// Keep the search bounded so a real missing readout still fails quickly.
+    private func scrollUpUntilExists(_ element: XCUIElement, maxSwipes: Int = 4) -> Bool {
+        if element.waitForExistence(timeout: 1) { return true }
+
+        for _ in 0..<maxSwipes {
+            app.swipeUp()
+            if element.waitForExistence(timeout: 1) { return true }
+        }
+        return element.exists
+    }
+
+    /// Returns to controls above the preview after reading its lower content.
+    private func scrollDownUntilHittable(_ element: XCUIElement, maxSwipes: Int = 4) -> Bool {
+        if element.waitForExistence(timeout: 1), element.isHittable { return true }
+
+        for _ in 0..<maxSwipes {
+            app.swipeDown()
+            if element.waitForExistence(timeout: 1), element.isHittable { return true }
+        }
+        return element.exists && element.isHittable
     }
 }
