@@ -27,14 +27,15 @@ title, New Chat button, or a row with the explicit `session-row` identifier;
 keep the generic-cell fallback only for lookup after the sidebar is known to
 be visible.
 
-## Feature selection must own compact detail navigation
+## Compact feature navigation must use explicit row actions
 
-On compact iPhones, a `NavigationSplitView` that relies on its default column
-state can leave a tapped feature row's sidebar overlay masking the selected
-detail. Bind `columnVisibility` and `preferredCompactColumn`, tag every
-feature row with its exact `FeatureEntry.id`, and, after a compact feature
-selection, set `.detailOnly` / `.detail`. Reset visibility to `.automatic`
-when the width returns to regular. UI tests should tap the exact, hittable row
-(boundedly scrolling only when needed) and assert the detail directly; do not
-use outside-sidebar taps or application swipes to compensate for app-owned
-navigation state.
+On compact iPhones, `List(selection:)` exposes a feature label as a tappable
+`StaticText`, but a synthesized tap on a lower row can fail to update the
+selection at all. Theming is the fifth iOS feature, while first-row Tools can
+still pass, so outside-sidebar taps and swipes cannot repair the failure.
+Render iOS Chat/features as full-width plain `Button`s that synchronously set
+`selectedFeatureID` and reassert the detail column, with stable
+`feature-sidebar-row-<id>` identifiers inside `feature-sidebar-list`. Keep
+macOS's native `List(selection:)` + tags. UI tests must target the identified
+buttons and scroll only the identified feature list, then assert the app-owned
+detail directly.

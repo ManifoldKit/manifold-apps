@@ -61,10 +61,11 @@ final class ThemingUITests: XCTestCase {
         )
 
         showSidebarIfNeeded(app: app)
-        let cloudRow = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label == 'Cloud'"))
-            .firstMatch
-        XCTAssertTrue(waitForElement(cloudRow, timeout: 5), "Sidebar should list a Cloud row")
+        let cloudRow = app.buttons["feature-sidebar-row-cloud"]
+        XCTAssertTrue(
+            waitForElement(cloudRow, timeout: 5) && cloudRow.isHittable,
+            "Sidebar should expose a tappable Cloud button"
+        )
         cloudRow.tap()
 
         navigateToTheming()
@@ -91,22 +92,21 @@ final class ThemingUITests: XCTestCase {
     private func navigateToTheming() {
         showSidebarIfNeeded(app: app)
 
-        let sidebarTitle = app.staticTexts["Chats"]
+        let featureList = app.descendants(matching: .any)["feature-sidebar-list"]
         XCTAssertTrue(
-            waitForElement(sidebarTitle, timeout: 2),
-            "Sidebar should remain visible while revealing the Theming row"
+            waitForElement(featureList, timeout: 2),
+            "Sidebar should expose the identified feature list"
         )
 
-        let row = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label == 'Theming'"))
-            .firstMatch
-        XCTAssertTrue(waitForElement(row, timeout: 5), "Sidebar should list a Theming row")
+        let row = app.buttons["feature-sidebar-row-theming"]
 
-        for _ in 0..<4 where !row.isHittable {
-            XCTAssertTrue(sidebarTitle.exists, "Sidebar must remain visible while scrolling to Theming")
-            app.swipeUp()
+        for _ in 0..<4 where !row.exists || !row.isHittable {
+            featureList.swipeUp()
         }
-        XCTAssertTrue(row.isHittable, "Theming row should become hittable after bounded sidebar scrolling")
+        XCTAssertTrue(
+            row.exists && row.isHittable,
+            "Theming button should become hittable after bounded feature-list scrolling"
+        )
         row.tap()
 
         let readout = app.descendants(matching: .any)["theming-corner-radius-label"]

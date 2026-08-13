@@ -118,10 +118,11 @@ final class ToolsUITests: XCTestCase {
 
     private func navigateToTools() {
         showSidebarIfNeeded(app: app)
-        let row = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label == 'Tools'"))
-            .firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 5), "Sidebar should list Tools")
+        let row = app.buttons["feature-sidebar-row-tools"]
+        XCTAssertTrue(
+            row.waitForExistence(timeout: 5) && row.isHittable,
+            "Sidebar should expose a tappable Tools button"
+        )
         row.tap()
         XCTAssertTrue(
             app.descendants(matching: .any)["tools-browser"].waitForExistence(timeout: 5),
@@ -131,15 +132,15 @@ final class ToolsUITests: XCTestCase {
 
     private func navigateToChat() {
         showSidebarIfNeeded(app: app)
-        // The row's icon inherits the same identifier, so constrain this to
-        // the single text node just as the Cloud UI test does.
-        let row = app.staticTexts["chat-sidebar-row"]
-        XCTAssertTrue(row.waitForExistence(timeout: 5), "Sidebar should expose Chat")
-        if row.isHittable {
-            row.tap()
-        } else {
-            row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        }
-        openChatDetailIfNeeded(app: app)
+        let row = app.buttons["feature-sidebar-row-chat"]
+        XCTAssertTrue(
+            row.waitForExistence(timeout: 5) && row.isHittable,
+            "Sidebar should expose a tappable Chat button"
+        )
+        row.tap()
+        XCTAssertTrue(
+            waitForChatInputReady(app: app, timeout: 30),
+            "Selecting Chat should restore the live chat detail"
+        )
     }
 }

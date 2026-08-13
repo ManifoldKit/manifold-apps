@@ -143,10 +143,11 @@ final class SmokeUITests: XCTestCase {
             return
         }
 
-        let toolsRow = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label == 'Tools'"))
-            .firstMatch
-        XCTAssertTrue(waitForElement(toolsRow, timeout: 5), "Sidebar should list Tools")
+        let toolsRow = app.buttons["feature-sidebar-row-tools"]
+        XCTAssertTrue(
+            waitForElement(toolsRow, timeout: 5) && toolsRow.isHittable,
+            "Sidebar should expose a tappable Tools button"
+        )
         toolsRow.tap()
         XCTAssertTrue(
             app.descendants(matching: .any)["tools-browser"].waitForExistence(timeout: 5),

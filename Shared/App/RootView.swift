@@ -124,16 +124,7 @@ struct RootView: View {
         VStack(spacing: 0) {
             SessionListView()
             Divider()
-            List(selection: $selectedFeatureID) {
-                Label("Chat", systemImage: "bubble.left.and.bubble.right")
-                    .tag("chat")
-                    .accessibilityIdentifier("chat-sidebar-row")
-
-                ForEach(features) { entry in
-                    Label(entry.title, systemImage: entry.systemImage)
-                        .tag(entry.id)
-                }
-            }
+            featureList
         }
         .navigationTitle("Chats")
         .toolbar {
@@ -146,6 +137,56 @@ struct RootView: View {
                 .keyboardShortcut("n", modifiers: .command)
             }
         }
+    }
+
+    @ViewBuilder
+    private var featureList: some View {
+        #if os(iOS)
+        List(selection: $selectedFeatureID) {
+            Button(action: { selectFeature("chat") }) {
+                Label("Chat", systemImage: "bubble.left.and.bubble.right")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .tag("chat")
+            .accessibilityIdentifier("feature-sidebar-row-chat")
+
+            ForEach(features) { entry in
+                Button(action: { selectFeature(entry.id) }) {
+                    Label(entry.title, systemImage: entry.systemImage)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .tag(entry.id)
+                .accessibilityIdentifier("feature-sidebar-row-\(entry.id)")
+            }
+        }
+        .accessibilityIdentifier("feature-sidebar-list")
+        #else
+        // Keep the native selection affordance on macOS. iOS uses explicit
+        // buttons above because its compact sidebar exposes Label descendants
+        // to UI automation rather than a reliable selected list row.
+        List(selection: $selectedFeatureID) {
+            Label("Chat", systemImage: "bubble.left.and.bubble.right")
+                .tag("chat")
+                .accessibilityIdentifier("chat-sidebar-row")
+
+            ForEach(features) { entry in
+                Label(entry.title, systemImage: entry.systemImage)
+                    .tag(entry.id)
+            }
+        }
+        #endif
+    }
+
+    private func selectFeature(_ id: String) {
+        selectedFeatureID = id
+        // `onChange` does not fire for a re-tap of the already-selected row,
+        // but reasserting the compact detail column is still required when
+        // the sidebar is currently presented over it.
+        showCompactDetail()
     }
 
     @ViewBuilder
@@ -201,8 +242,8 @@ struct RootView: View {
     private func showCompactDetail() {
         #if os(iOS)
         guard horizontalSizeClass == .compact else { return }
-        preferredCompactColumn = .detail
         columnVisibility = .detailOnly
+        preferredCompactColumn = .detail
         #endif
     }
 
