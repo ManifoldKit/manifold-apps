@@ -65,15 +65,19 @@ enum ManifoldToolset {
     }
 
     /// Curates the schemas offered to the active model without removing any
-    /// executor from the registry. OpenAI and Claude paths receive the full
-    /// reference/failure catalog; local and unrecognised identities stay at
-    /// the conservative five-tool ceiling.
+    /// executor from the registry. This switches exhaustively over v0.75's
+    /// published `APIProvider` identities because cloud lifecycle descriptors
+    /// use those stable provider codes as `activeBackendName` (not every code,
+    /// notably `openAIResponses`, is a `BackendName` well-known constant).
+    /// Remote/API-key providers receive the full reference/failure catalog;
+    /// Ollama, LM Studio, and unrecognised identities stay at the conservative
+    /// five-tool ceiling.
     @MainActor
     static func updateAdvertisement(on registry: ToolRegistry, backendName: String?) {
-        let backend = backendName.flatMap(BackendName.parse)
-        if backend == .openAI || backend == .claude {
+        switch backendName.flatMap(APIProvider.parse) {
+        case .openAI, .openAIResponses, .claude, .custom:
             registry.advertisedToolNames = nil
-        } else {
+        case .ollama, .lmStudio, nil:
             registry.advertisedToolNames = localAdvertisedNames
         }
     }

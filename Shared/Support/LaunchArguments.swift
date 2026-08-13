@@ -24,9 +24,9 @@ enum LaunchArguments {
         isUITesting && CommandLine.arguments.contains("--tool-approval-test")
     }
 
-    /// Gives the deterministic backend a cloud identity so the Tools browser
-    /// can prove the full reference catalog remains available off local-model
-    /// paths without contacting a live provider.
+    /// Gives the deterministic backend the published OpenAI Responses provider
+    /// identity so the Tools browser can prove the full reference catalog
+    /// remains available on that cloud path without contacting a live provider.
     static var showsCloudToolCatalog: Bool {
         isUITesting && CommandLine.arguments.contains("--cloud-tool-catalog-test")
     }

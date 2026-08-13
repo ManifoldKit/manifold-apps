@@ -102,7 +102,7 @@ final class ToolsUITests: XCTestCase {
         XCTAssertTrue(advertisementSummary.waitForExistence(timeout: 5))
         XCTAssertTrue(
             advertisementSummary.label.contains("8 of 8 tools advertised"),
-            "Known cloud identities should retain the complete reference and failure-tool catalog"
+            "OpenAI Responses should retain the complete reference and failure-tool catalog"
         )
 
         let rateLimitedTool = app.descendants(matching: .any)["tool-row-fakeRateLimited"]

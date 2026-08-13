@@ -106,7 +106,7 @@ final class AppEnvironment {
             } else {
                 backend = ScriptedBackend(turns: uiTestTurns)
                 backendName = LaunchArguments.showsCloudToolCatalog
-                    ? BackendName.openAI.rawValue
+                    ? APIProvider.openAIResponses.rawValue
                     : "ScriptedUITest"
             }
             inferenceService = InferenceService(
