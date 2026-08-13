@@ -69,6 +69,5 @@ struct ToolApprovalSheet: View {
         }
         .padding(20)
         .frame(minWidth: 340)
-        .accessibilityIdentifier("approval-sheet")
     }
 }
