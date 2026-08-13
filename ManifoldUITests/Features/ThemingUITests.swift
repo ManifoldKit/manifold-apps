@@ -24,11 +24,10 @@ final class ThemingUITests: XCTestCase {
 
     func testSwitchingPresetChangesLivePreview() throws {
         navigateToTheming()
-        let detailScrollView = requireThemingDetailScrollView()
 
         let cornerRadiusLabel = app.descendants(matching: .any)["theming-corner-radius-label"]
         XCTAssertTrue(
-            scrollUpUntilExists(cornerRadiusLabel, in: detailScrollView),
+            waitForElement(cornerRadiusLabel, timeout: 5),
             "Theming showcase should render its live-preview corner-radius readout"
         )
 
@@ -39,21 +38,15 @@ final class ThemingUITests: XCTestCase {
         )
 
         let picker = app.descendants(matching: .any)["theming-preset-picker"]
-        XCTAssertTrue(
-            scrollDownUntilHittable(picker, in: detailScrollView),
-            "Theming showcase should expose its preset picker"
-        )
+        XCTAssertTrue(waitForElement(picker, timeout: 5), "Theming showcase should expose its preset picker")
 
         let classicOption = app.buttons["Classic"]
-        XCTAssertTrue(
-            scrollDownUntilHittable(classicOption, in: detailScrollView),
-            "Preset picker should offer a Classic segment"
-        )
+        XCTAssertTrue(waitForElement(classicOption, timeout: 5), "Preset picker should offer a Classic segment")
         classicOption.tap()
 
         let updatedLabel = app.descendants(matching: .any)["theming-corner-radius-label"]
         XCTAssertTrue(
-            scrollUpUntilExists(updatedLabel, in: detailScrollView),
+            waitForElement(updatedLabel, timeout: 5),
             "Theming showcase should keep its live-preview readout after changing presets"
         )
         let updatedValue = updatedLabel.label
@@ -81,10 +74,9 @@ final class ThemingUITests: XCTestCase {
         XCTAssertTrue(waitForElement(themingRow, timeout: 5), "Sidebar should still list a Theming row")
         themingRow.tap()
 
-        let restoredScrollView = requireThemingDetailScrollView()
         let restoredLabel = app.descendants(matching: .any)["theming-corner-radius-label"]
         XCTAssertTrue(
-            scrollUpUntilExists(restoredLabel, in: restoredScrollView),
+            waitForElement(restoredLabel, timeout: 5),
             "Theming showcase should restore its live-preview readout after reconstruction"
         )
         let restoredValue = restoredLabel.label
@@ -107,61 +99,5 @@ final class ThemingUITests: XCTestCase {
         let row = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'Theming'")).firstMatch
         XCTAssertTrue(waitForElement(row, timeout: 5), "Sidebar should list a Theming row")
         row.tap()
-    }
-
-    /// Finds the detail pane semantically without assigning an accessibility
-    /// identifier to the container (which would hide its child identifiers).
-    private func requireThemingDetailScrollView(
-        file: StaticString = #filePath,
-        line: UInt = #line
-    ) -> XCUIElement {
-        let scrollView = app.scrollViews
-            .containing(.staticText, identifier: "Live preview")
-            .firstMatch
-        XCTAssertTrue(
-            scrollView.waitForExistence(timeout: 5),
-            "Theming detail should expose the ScrollView containing its Live preview heading",
-            file: file,
-            line: line
-        )
-        XCTAssertTrue(
-            scrollView.isHittable,
-            "Theming detail ScrollView should be hittable before scrolling",
-            file: file,
-            line: line
-        )
-        return scrollView
-    }
-
-    /// Compact CI devices do not expose descendants below the detail
-    /// `ScrollView` viewport until that exact container has been scrolled.
-    /// Keep the search bounded so a real missing readout still fails quickly.
-    private func scrollUpUntilExists(
-        _ element: XCUIElement,
-        in scrollView: XCUIElement,
-        maxSwipes: Int = 4
-    ) -> Bool {
-        if element.waitForExistence(timeout: 1) { return true }
-
-        for _ in 0..<maxSwipes {
-            scrollView.swipeUp()
-            if element.waitForExistence(timeout: 1) { return true }
-        }
-        return element.exists
-    }
-
-    /// Returns to controls above the preview after reading its lower content.
-    private func scrollDownUntilHittable(
-        _ element: XCUIElement,
-        in scrollView: XCUIElement,
-        maxSwipes: Int = 4
-    ) -> Bool {
-        if element.waitForExistence(timeout: 1), element.isHittable { return true }
-
-        for _ in 0..<maxSwipes {
-            scrollView.swipeDown()
-            if element.waitForExistence(timeout: 1), element.isHittable { return true }
-        }
-        return element.exists && element.isHittable
     }
 }

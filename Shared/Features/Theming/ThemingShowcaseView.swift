@@ -106,13 +106,13 @@ struct ThemingShowcaseView: View {
             Text("Live preview")
                 .font(.headline)
 
+            EffectiveThemeReadout()
+
             VStack(spacing: 8) {
                 MessageBubbleView(message: userPreviewMessage, isStreaming: false)
                 MessageBubbleView(message: assistantPreviewMessage, isStreaming: false)
             }
             .environment(env.viewModel)
-
-            EffectiveThemeReadout()
         }
         .padding(16)
         .background(env.theme.surface, in: RoundedRectangle(cornerRadius: 16))
