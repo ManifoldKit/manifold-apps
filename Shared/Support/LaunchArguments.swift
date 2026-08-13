@@ -33,7 +33,9 @@ enum LaunchArguments {
 
     /// Seeds the real App Group envelope before composition begins so the UI
     /// suite can exercise AppIntentsFeature's production read/buffer/deliver
-    /// path across the app-process boundary.
+    /// path inside the app process. Simulator UI-test runners are ad-hoc
+    /// signed without application-group entitlements, so they cannot seed the
+    /// app's suite cross-process even though device builds carry the group.
     static var appIntentPrompt: String? {
         guard isUITesting else { return nil }
         return value(after: "--appintent-prompt")
