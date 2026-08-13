@@ -15,12 +15,6 @@ final class ToolsUITests: XCTestCase {
     func testApprovedWriteToolCompletesAndReturnsResult() throws {
         navigateToTools()
 
-        let liveWriteTool = app.descendants(matching: .any)["tool-row-write_file"]
-        XCTAssertTrue(
-            liveWriteTool.waitForExistence(timeout: 5),
-            "Tools browser should read the registered write_file definition from the live registry"
-        )
-
         let policyButton = app.buttons["tools-policy-button"]
         XCTAssertTrue(
             policyButton.waitForExistence(timeout: 5) && policyButton.isHittable,
@@ -35,6 +29,19 @@ final class ToolsUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Always ask"].waitForExistence(timeout: 3), "Policy editor should expose Always ask")
         app.buttons["Always ask"].tap()
         app.buttons["tool-policy-done-button"].tap()
+
+        // SwiftUI's lazy List does not materialize rows below the viewport
+        // into the accessibility hierarchy. Scroll the live browser until
+        // write_file's stable row identifier exists.
+        let liveWriteTool = app.descendants(matching: .any)["tool-row-write_file"]
+        let toolsBrowser = app.descendants(matching: .any)["tools-browser"]
+        for _ in 0..<4 where !liveWriteTool.exists {
+            toolsBrowser.swipeUp()
+        }
+        XCTAssertTrue(
+            liveWriteTool.waitForExistence(timeout: 3),
+            "Tools browser should read the registered write_file definition from the live registry"
+        )
 
         navigateToChat()
         XCTAssertTrue(
