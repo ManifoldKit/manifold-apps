@@ -17,6 +17,13 @@ enum LaunchArguments {
         isUITesting && CommandLine.arguments.contains("--show-api-key-recovery")
     }
 
+    /// Selects the deterministic approval-flow script and inline approval
+    /// presentation used by `ToolsUITests`. Kept opt-in so the ordinary smoke
+    /// tests retain their token-only scripted turns.
+    static var runsToolApprovalFlow: Bool {
+        isUITesting && CommandLine.arguments.contains("--tool-approval-test")
+    }
+
     /// The value following `--scenario <id>`, if present. Reserved for the
     /// future `ScenariosFeature` (mirrors core's `--bck-demo-scenario`);
     /// unused until that feature is ported.

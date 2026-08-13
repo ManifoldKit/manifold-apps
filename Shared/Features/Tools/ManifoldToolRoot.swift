@@ -1,4 +1,5 @@
 import Foundation
+import ManifoldInference
 
 /// Resolves and seeds the app's filesystem-tool sandbox.
 ///
@@ -8,23 +9,36 @@ enum ManifoldToolRoot {
 
     /// Returns the app-owned sandbox root. Creates the parent directory lazily.
     ///
-    /// Under `--uitesting`, the caller passes a per-launch temp directory
-    /// instead (mirrors core's `ManifoldDemoApp.resolveSandboxRoot(isTesting:)`)
-    /// so XCUITests leave no residue in Application Support.
+    /// Under `--uitesting`, resolves a per-process temp directory so XCUITests
+    /// leave no residue in Application Support.
     static func resolve() -> URL {
         let fm = FileManager.default
-        let base = (try? fm.url(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        )) ?? fm.temporaryDirectory
+        if LaunchArguments.isUITesting {
+            return uiTestingRoot
+        }
+
+        let base: URL
+        do {
+            base = try fm.url(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: true
+            )
+        } catch {
+            Log.inference.warning("ManifoldToolRoot: failed to resolve Application Support; using the temporary directory: \(String(describing: error), privacy: .public)")
+            base = fm.temporaryDirectory
+        }
 
         let root = base
             .appendingPathComponent("Manifold", isDirectory: true)
             .appendingPathComponent("ToolRoot", isDirectory: true)
 
-        try? fm.createDirectory(at: root, withIntermediateDirectories: true)
+        do {
+            try fm.createDirectory(at: root, withIntermediateDirectories: true)
+        } catch {
+            Log.inference.warning("ManifoldToolRoot: failed to create tool root at \(root.path, privacy: .public): \(String(describing: error), privacy: .public)")
+        }
         return root
     }
 
@@ -42,7 +56,7 @@ enum ManifoldToolRoot {
         if fm.fileExists(atPath: marker.path) {
             // Re-seed only when the marker is the sole survivor — not when
             // user content lives alongside it.
-            let contents = (try? fm.contentsOfDirectory(atPath: root.path)) ?? []
+            let contents = try fm.contentsOfDirectory(atPath: root.path)
             let nonMarker = contents.filter { $0 != ".seeded" }
             if !nonMarker.isEmpty { return }
         }
@@ -100,4 +114,7 @@ enum ManifoldToolRoot {
         olive oil
         """),
     ]
+
+    private static let uiTestingRoot = FileManager.default.temporaryDirectory
+        .appendingPathComponent("ManifoldToolsUITest-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
 }

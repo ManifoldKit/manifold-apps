@@ -170,7 +170,10 @@ final class AppEnvironment {
             // here too; that's a known flaw in the recipe, not a pattern to
             // inherit — see Principle 6, "Errors are visible").
             do {
-                let fresh = try await sessionManager.createSession()
+                let title = LaunchArguments.runsToolApprovalFlow
+                    ? "Tool Approval Test"
+                    : "New Chat"
+                let fresh = try await sessionManager.createSession(title: title)
                 sessionManager.activeSession = fresh
                 await viewModel.switchToSession(fresh)
             } catch {
@@ -216,9 +219,21 @@ final class AppEnvironment {
     /// returns an empty terminal turn once these are exhausted, which the
     /// turn loop treats as "no more tool calls, stop" rather than an error,
     /// so running out mid-session is harmless.
-    private static let uiTestTurns: [ScriptedBackend.Turn] = [
-        .tokens(["Hello", " from", " the", " scripted", " UI-test", " backend", "."]),
-        .tokens(["Sure", ",", " happy", " to", " help", "."]),
-        .tokens(["Got", " it", "."]),
-    ]
+    private static var uiTestTurns: [ScriptedBackend.Turn] {
+        if LaunchArguments.runsToolApprovalFlow {
+            return [
+                .toolCall(
+                    name: "write_file",
+                    arguments: #"{"path":"approval/result.txt","content":"approved through the live UI gate"}"#
+                ),
+                .tokens(["Tool", " write", " approved", " and", " completed", "."]),
+            ]
+        }
+
+        return [
+            .tokens(["Hello", " from", " the", " scripted", " UI-test", " backend", "."]),
+            .tokens(["Sure", ",", " happy", " to", " help", "."]),
+            .tokens(["Got", " it", "."]),
+        ]
+    }
 }

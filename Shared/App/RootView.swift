@@ -31,7 +31,34 @@ struct RootView: View {
     }
 
     var body: some View {
+        // Establish Observation tracking for the pending queue so the
+        // presentation binding below re-evaluates when a tool call arrives.
+        let _ = env.toolApprovalGate.pending.count
+
         themedRoot
+            .sheet(isPresented: approvalSheetIsPresented) {
+                if let call = env.toolApprovalGate.pending.first {
+                    ToolApprovalSheet(call: call)
+                        .environment(env.viewModel)
+                } else {
+                    Color.clear.frame(width: 1, height: 1)
+                }
+            }
+            .overlay {
+                // SwiftUI sheet timing is nondeterministic under XCUITest.
+                // The deterministic tool-flow launch mounts the same real
+                // approval view inline; its buttons still resolve the live
+                // UIToolApprovalGate continuation used by the turn loop.
+                if LaunchArguments.runsToolApprovalFlow,
+                   let call = env.toolApprovalGate.pending.first {
+                    ToolApprovalSheet(call: call)
+                        .environment(env.viewModel)
+                        .background(.regularMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .shadow(radius: 12)
+                        .padding()
+                }
+            }
     }
 
     @ViewBuilder
@@ -159,6 +186,22 @@ struct RootView: View {
         #else
         .automatic
         #endif
+    }
+
+    private var approvalSheetIsPresented: Binding<Bool> {
+        Binding(
+            get: {
+                !LaunchArguments.runsToolApprovalFlow
+                    && !env.toolApprovalGate.pending.isEmpty
+            },
+            set: { isPresented in
+                guard !isPresented, let call = env.toolApprovalGate.pending.first else { return }
+                env.toolApprovalGate.resolve(
+                    callId: call.id,
+                    with: .denied(reason: "dismissed")
+                )
+            }
+        )
     }
 }
 
