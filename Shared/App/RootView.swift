@@ -8,8 +8,13 @@ import ManifoldUIModelManagement
 /// from the SwiftUI environment; owns no bootstrap state of its own.
 struct RootView: View {
     @Environment(AppEnvironment.self) private var env
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
 
     @State private var selectedFeatureID: String?
+    @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
+    @State private var preferredCompactColumn: NavigationSplitViewColumn = .detail
     @State private var didInstallFeatures = false
 
     /// Satisfies `ChatView`'s required binding. No `ModelManagementSheet` is
@@ -73,7 +78,10 @@ struct RootView: View {
     }
 
     private var rootContent: some View {
-        NavigationSplitView {
+        NavigationSplitView(
+            columnVisibility: $columnVisibility,
+            preferredCompactColumn: $preferredCompactColumn
+        ) {
             sidebar
         } detail: {
             detail
@@ -87,10 +95,24 @@ struct RootView: View {
                 feature.install(into: env)
             }
         }
-        .onChange(of: selectedFeatureID) { oldValue, _ in
+        .onChange(of: selectedFeatureID) { oldValue, newValue in
+            #if os(iOS)
+            if horizontalSizeClass == .compact,
+               newValue != nil {
+                preferredCompactColumn = .detail
+                columnVisibility = .detailOnly
+            }
+            #endif
+
             guard oldValue == CloudFeature.id else { return }
             Task { await env.refreshAvailableEndpoints() }
         }
+        #if os(iOS)
+        .onChange(of: horizontalSizeClass) { _, newSizeClass in
+            guard newSizeClass != .compact else { return }
+            columnVisibility = .automatic
+        }
+        #endif
         .onChange(of: env.viewModel.activeBackendName, initial: true) { _, _ in
             ToolsFeature.updateAdvertisement(in: env)
         }
@@ -107,6 +129,7 @@ struct RootView: View {
 
                 ForEach(features) { entry in
                     Label(entry.title, systemImage: entry.systemImage)
+                        .tag(entry.id)
                 }
             }
         }

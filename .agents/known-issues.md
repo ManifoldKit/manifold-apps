@@ -27,15 +27,14 @@ title, New Chat button, or a row with the explicit `session-row` identifier;
 keep the generic-cell fallback only for lookup after the sidebar is known to
 be visible.
 
-## Feature selection can leave the compact sidebar masking its detail
+## Feature selection must own compact detail navigation
 
-On compact iPhones, tapping an exact, hittable `NavigationSplitView` sidebar
-row can synthesize successfully while the sidebar overlay remains open and the
-selected detail stays absent from the accessibility tree. Later detail
-assertions then fail, and application-level swipes misleadingly manipulate the
-still-open sidebar. Keep exact-row existence and hittability guards (boundedly
-scroll first when a lower row is genuinely offscreen), then tap the row and
-assert a detail-only element. If it is absent, dismiss the overlay with an
-outside-sidebar tap and a swipe-left fallback before the final bounded detail
-assertion. Do not infer successful navigation from the row tap alone, and do
-not fall back to an arbitrary cell.
+On compact iPhones, a `NavigationSplitView` that relies on its default column
+state can leave a tapped feature row's sidebar overlay masking the selected
+detail. Bind `columnVisibility` and `preferredCompactColumn`, tag every
+feature row with its exact `FeatureEntry.id`, and, after a compact feature
+selection, set `.detailOnly` / `.detail`. Reset visibility to `.automatic`
+when the width returns to regular. UI tests should tap the exact, hittable row
+(boundedly scrolling only when needed) and assert the detail directly; do not
+use outside-sidebar taps or application swipes to compensate for app-owned
+navigation state.
