@@ -67,12 +67,7 @@ final class ThemingUITests: XCTestCase {
         XCTAssertTrue(waitForElement(cloudRow, timeout: 5), "Sidebar should list a Cloud row")
         cloudRow.tap()
 
-        showSidebarIfNeeded(app: app)
-        let themingRow = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label == 'Theming'"))
-            .firstMatch
-        XCTAssertTrue(waitForElement(themingRow, timeout: 5), "Sidebar should still list a Theming row")
-        themingRow.tap()
+        navigateToTheming()
 
         let restoredLabel = app.descendants(matching: .any)["theming-corner-radius-label"]
         XCTAssertTrue(
@@ -96,8 +91,28 @@ final class ThemingUITests: XCTestCase {
     private func navigateToTheming() {
         showSidebarIfNeeded(app: app)
 
-        let row = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'Theming'")).firstMatch
+        let sidebarTitle = app.staticTexts["Chats"]
+        XCTAssertTrue(
+            waitForElement(sidebarTitle, timeout: 2),
+            "Sidebar should remain visible while revealing the Theming row"
+        )
+
+        let row = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == 'Theming'"))
+            .firstMatch
         XCTAssertTrue(waitForElement(row, timeout: 5), "Sidebar should list a Theming row")
+
+        for _ in 0..<4 where !row.isHittable {
+            XCTAssertTrue(sidebarTitle.exists, "Sidebar must remain visible while scrolling to Theming")
+            app.swipeUp()
+        }
+        XCTAssertTrue(row.isHittable, "Theming row should become hittable after bounded sidebar scrolling")
         row.tap()
+
+        let readout = app.descendants(matching: .any)["theming-corner-radius-label"]
+        XCTAssertTrue(
+            waitForElement(readout, timeout: 5),
+            "Tapping the Theming row should open the Theming detail"
+        )
     }
 }

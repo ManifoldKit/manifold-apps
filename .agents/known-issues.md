@@ -26,3 +26,15 @@ form row instead of a chat session. Detect sidebar visibility only from its
 title, New Chat button, or a row with the explicit `session-row` identifier;
 keep the generic-cell fallback only for lookup after the sidebar is known to
 be visible.
+
+## Existing sidebar rows can still be offscreen and non-hittable
+
+On compact iPhones, a lower `NavigationSplitView` sidebar row may satisfy an
+XCUITest existence query while remaining outside the visible viewport. Calling
+`tap()` on that element does not navigate, so later detail assertions fail and
+application-level swipes can misleadingly appear to target the detail while
+they are actually scrolling the still-open sidebar. After confirming the
+sidebar itself is visible, boundedly scroll until the exact labelled row is
+hittable, assert hittability, tap it, and then assert a stable detail element
+before continuing. Do not treat `exists` alone as proof that navigation is
+possible, and do not fall back to an arbitrary cell.
