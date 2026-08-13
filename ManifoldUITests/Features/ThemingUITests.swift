@@ -105,7 +105,8 @@ final class ThemingUITests: XCTestCase {
         }
         XCTAssertTrue(
             row.exists && row.isHittable,
-            "Theming button should become hittable after bounded feature-list scrolling"
+            "Theming button should become hittable after bounded feature-list scrolling; "
+                + "list=\(featureList.frame), row=\(row.frame)"
         )
         row.tap()
 

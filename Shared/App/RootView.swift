@@ -142,32 +142,41 @@ struct RootView: View {
     @ViewBuilder
     private var featureList: some View {
         #if os(iOS)
-        List(selection: $selectedFeatureID) {
-            Button(action: { selectFeature("chat") }) {
-                Label("Chat", systemImage: "bubble.left.and.bubble.right")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .tag("chat")
-            .accessibilityIdentifier("feature-sidebar-row-chat")
+        if horizontalSizeClass == .compact {
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    featureButton(
+                        id: "chat",
+                        title: "Chat",
+                        systemImage: "bubble.left.and.bubble.right"
+                    )
 
-            ForEach(features) { entry in
-                Button(action: { selectFeature(entry.id) }) {
-                    Label(entry.title, systemImage: entry.systemImage)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
+                    ForEach(features) { entry in
+                        Divider()
+                        featureButton(
+                            id: entry.id,
+                            title: entry.title,
+                            systemImage: entry.systemImage
+                        )
+                    }
                 }
-                .buttonStyle(.plain)
-                .tag(entry.id)
-                .accessibilityIdentifier("feature-sidebar-row-\(entry.id)")
+            }
+            .accessibilityIdentifier("feature-sidebar-list")
+        } else {
+            List(selection: $selectedFeatureID) {
+                Label("Chat", systemImage: "bubble.left.and.bubble.right")
+                    .tag("chat")
+
+                ForEach(features) { entry in
+                    Label(entry.title, systemImage: entry.systemImage)
+                        .tag(entry.id)
+                }
             }
         }
-        .accessibilityIdentifier("feature-sidebar-list")
         #else
-        // Keep the native selection affordance on macOS. iOS uses explicit
-        // buttons above because its compact sidebar exposes Label descendants
-        // to UI automation rather than a reliable selected list row.
+        // Keep the native selection affordance on macOS. On compact iPhones,
+        // stacking this feature region as a second List below SessionListView
+        // can swallow lower-row actions even when the row reports hittable.
         List(selection: $selectedFeatureID) {
             Label("Chat", systemImage: "bubble.left.and.bubble.right")
                 .tag("chat")
@@ -180,6 +189,21 @@ struct RootView: View {
         }
         #endif
     }
+
+    #if os(iOS)
+    private func featureButton(id: String, title: String, systemImage: String) -> some View {
+        Button(action: { selectFeature(id) }) {
+            Label(title, systemImage: systemImage)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selectedFeatureID == id ? .isSelected : [])
+        .accessibilityIdentifier("feature-sidebar-row-\(id)")
+    }
+    #endif
 
     private func selectFeature(_ id: String) {
         selectedFeatureID = id

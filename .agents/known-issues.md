@@ -27,15 +27,17 @@ title, New Chat button, or a row with the explicit `session-row` identifier;
 keep the generic-cell fallback only for lookup after the sidebar is known to
 be visible.
 
-## Compact feature navigation must use explicit row actions
+## Compact feature navigation must avoid sibling `List` hit-routing
 
-On compact iPhones, `List(selection:)` exposes a feature label as a tappable
-`StaticText`, but a synthesized tap on a lower row can fail to update the
-selection at all. Theming is the fifth iOS feature, while first-row Tools can
-still pass, so outside-sidebar taps and swipes cannot repair the failure.
-Render iOS Chat/features as full-width plain `Button`s that synchronously set
-`selectedFeatureID` and reassert the detail column, with stable
-`feature-sidebar-row-<id>` identifiers inside `feature-sidebar-list`. Keep
-macOS's native `List(selection:)` + tags. UI tests must target the identified
-buttons and scroll only the identified feature list, then assert the app-owned
-detail directly.
+On a compact iPhone 16, the sidebar's sibling `SessionListView` and feature
+`List` can report a lower feature button as existing and hittable, synthesize
+its tap, yet never run the button action. First-row Tools still passes while
+fifth-row Theming fails, and an artificial pre-tap list scroll makes Theming
+pass, proving the stacked-list hit-routing/position is causal rather than the
+detail transition. Render the iOS feature region as a `ScrollView` with a
+`LazyVStack` of full-width plain `Button`s that synchronously select the
+feature and reassert the detail column. Keep stable
+`feature-sidebar-row-<id>` identifiers inside `feature-sidebar-list`, and keep
+macOS's native `List(selection:)` + tags. UI tests should target the identified
+buttons, use only bounded pre-activation scrolling when a row is genuinely
+not hittable, then assert the app-owned detail directly.
