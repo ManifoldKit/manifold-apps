@@ -1,6 +1,6 @@
 import Foundation
 
-/// Makes the write → open → conditional-clear ordering explicit and testable.
+/// Makes the write → open → unique-payload-clear ordering explicit and testable.
 /// In particular, a failed `UIApplication.open` may clear only the uniquely
 /// identified envelope it wrote — never a newer invocation's replacement.
 @MainActor
@@ -21,12 +21,12 @@ enum InboundAppIntentHandoff {
 
     static func writeAndOpen(
         write: () throws -> UUID,
-        discardIfCurrent: (UUID) -> Void,
+        discardWrittenPayload: (UUID) -> Void,
         open: () async -> Bool
     ) async throws {
         let handoffID = try write()
         guard await open() else {
-            discardIfCurrent(handoffID)
+            discardWrittenPayload(handoffID)
             throw Error.failedToOpenRoute
         }
     }

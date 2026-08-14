@@ -66,7 +66,7 @@ public struct AskManifoldAppIntent: AppIntent {
             }
             try await InboundAppIntentHandoff.writeAndOpen(
                 write: { try InboundAppIntentEnvelopeStore.write(envelope) },
-                discardIfCurrent: InboundAppIntentEnvelopeStore.discardIfCurrent,
+                discardWrittenPayload: InboundAppIntentEnvelopeStore.discardWrittenPayload,
                 open: { await UIApplication.shared.open(route, options: [:]) }
             )
             #else

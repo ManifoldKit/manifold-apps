@@ -84,6 +84,7 @@ final class AppIntentsUITests: XCTestCase {
         let delivery = Task {
             await buffer.deliverWhenModelReady(generation: generation, readinessUpdates: updates) { inbound in
                 recorder.record(inbound)
+                return true
             }
         }
 
@@ -119,6 +120,7 @@ final class AppIntentsUITests: XCTestCase {
 
         await buffer.deliverWhenModelReady(generation: generation, readinessUpdates: updates) { inbound in
             recorder.record(inbound)
+            return true
         }
 
         let retained = await buffer.peek()
@@ -149,6 +151,7 @@ final class AppIntentsUITests: XCTestCase {
         let delivery = Task {
             await buffer.deliverWhenModelReady(generation: generation, readinessUpdates: updates) { inbound in
                 recorder.record(inbound)
+                return true
             }
         }
 
@@ -177,6 +180,7 @@ final class AppIntentsUITests: XCTestCase {
         let firstDelivery = Task {
             await buffer.deliverWhenModelReady(generation: firstGeneration, readinessUpdates: firstUpdates) { inbound in
                 recorder.record(inbound)
+                return true
             }
         }
 
@@ -198,8 +202,136 @@ final class AppIntentsUITests: XCTestCase {
         }
         await buffer.deliverWhenModelReady(generation: newerGeneration, readinessUpdates: readyUpdates) { inbound in
             recorder.record(inbound)
+            return true
         }
         XCTAssertEqual(recorder.payloads.map(\.prompt), ["newer warm payload"])
+    }
+
+    /// The bootstrap installation can reach `.ready` just before RootView's
+    /// feature loop replaces it. If cancellation wins before `ingest`
+    /// acknowledges, the cold-start payload must remain for that replacement
+    /// task. Sabotage rationale: draining before the closure returns (the old
+    /// implementation) leaves `peek()` nil and makes this regression fail.
+    @MainActor
+    func test_pendingPayload_cancellationAfterReadyBeforeAcknowledgementRetainsPayload() async {
+        let buffer = PendingPayloadBuffer()
+        let payload = InboundPayload(prompt: "retain after canceled ready delivery", source: .appIntent)
+        let generation = await buffer.store(payload)
+        let acknowledgement = DeliveryAcknowledgementProbe()
+        let recorder = PayloadRecorder()
+        let updates = AsyncStream<ModelLoadReadinessState> { continuation in
+            continuation.yield(.ready)
+            continuation.finish()
+        }
+        let canceledDelivery = Task {
+            await buffer.deliverWhenModelReady(generation: generation, readinessUpdates: updates) { inbound in
+                await acknowledgement.waitForRelease()
+                guard !Task.isCancelled else { return false }
+                recorder.record(inbound)
+                return true
+            }
+        }
+
+        await acknowledgement.waitUntilWaiting()
+        canceledDelivery.cancel()
+        await acknowledgement.release()
+        await canceledDelivery.value
+
+        let retained = await buffer.peek()
+        let state = await buffer.currentDeliveryState()
+        XCTAssertEqual(retained?.prompt, payload.prompt)
+        XCTAssertEqual(state, .deliveryUnacknowledged)
+        XCTAssertTrue(recorder.payloads.isEmpty, "A canceled pre-acknowledgement closure must not claim ingestion")
+
+        let retryUpdates = AsyncStream<ModelLoadReadinessState> { continuation in
+            continuation.yield(.ready)
+            continuation.finish()
+        }
+        await buffer.deliverWhenModelReady(generation: generation, readinessUpdates: retryUpdates) { inbound in
+            recorder.record(inbound)
+            return true
+        }
+        let drainedAfterRetry = await buffer.peek()
+        XCTAssertNil(drainedAfterRetry)
+        XCTAssertEqual(recorder.payloads.map(\.prompt), [payload.prompt])
+    }
+
+    /// A delivery closure can suspend in `ingest` while a newer warm route
+    /// replaces the single slot. Even if the predecessor subsequently
+    /// acknowledges its own ingest, only that old turn completed; it may not
+    /// drain the newer payload.
+    @MainActor
+    func test_pendingPayload_acknowledgementAfterReplacementPreservesNewerGeneration() async {
+        let buffer = PendingPayloadBuffer()
+        let recorder = PayloadRecorder()
+        let firstGeneration = await buffer.store(InboundPayload(prompt: "first", source: .appIntent))
+        let acknowledgement = DeliveryAcknowledgementProbe()
+        let updates = AsyncStream<ModelLoadReadinessState> { continuation in
+            continuation.yield(.ready)
+            continuation.finish()
+        }
+        let firstDelivery = Task {
+            await buffer.deliverWhenModelReady(generation: firstGeneration, readinessUpdates: updates) { inbound in
+                await acknowledgement.waitForRelease()
+                recorder.record(inbound)
+                return true
+            }
+        }
+
+        await acknowledgement.waitUntilWaiting()
+        let newerGeneration = await buffer.store(InboundPayload(prompt: "newer", source: .appIntent))
+        await acknowledgement.release()
+        await firstDelivery.value
+
+        let retainedNewer = await buffer.peek()
+        XCTAssertEqual(retainedNewer?.prompt, "newer")
+        let retryUpdates = AsyncStream<ModelLoadReadinessState> { continuation in
+            continuation.yield(.ready)
+            continuation.finish()
+        }
+        await buffer.deliverWhenModelReady(generation: newerGeneration, readinessUpdates: retryUpdates) { inbound in
+            recorder.record(inbound)
+            return true
+        }
+        XCTAssertEqual(recorder.payloads.map(\.prompt), ["first", "newer"])
+    }
+
+    /// `deliverWhenModelReady` awaits the acknowledgement closure, so the
+    /// actor is re-entrant while `ingest` is running. A generation claim must
+    /// prevent a second same-generation install from entering another closure
+    /// during that window.
+    @MainActor
+    func test_pendingPayload_sameGenerationAllowsOnlyOneAcknowledgedDelivery() async {
+        let buffer = PendingPayloadBuffer()
+        let generation = await buffer.store(InboundPayload(prompt: "once", source: .appIntent))
+        let acknowledgement = DeliveryAcknowledgementProbe()
+        let recorder = PayloadRecorder()
+        let firstUpdates = AsyncStream<ModelLoadReadinessState> { continuation in
+            continuation.yield(.ready)
+            continuation.finish()
+        }
+        let firstDelivery = Task {
+            await buffer.deliverWhenModelReady(generation: generation, readinessUpdates: firstUpdates) { inbound in
+                await acknowledgement.waitForRelease()
+                recorder.record(inbound)
+                return true
+            }
+        }
+
+        await acknowledgement.waitUntilWaiting()
+        let secondUpdates = AsyncStream<ModelLoadReadinessState> { continuation in
+            continuation.yield(.ready)
+            continuation.finish()
+        }
+        await buffer.deliverWhenModelReady(generation: generation, readinessUpdates: secondUpdates) { inbound in
+            recorder.record(inbound)
+            return true
+        }
+        XCTAssertTrue(recorder.payloads.isEmpty, "A duplicate same-generation task must not enter its delivery closure")
+
+        await acknowledgement.release()
+        await firstDelivery.value
+        XCTAssertEqual(recorder.payloads.map(\.prompt), ["once"])
     }
 
     func test_backgroundReadinessGate_waitsBeforeGenerating() async throws {
@@ -352,7 +484,7 @@ final class AppIntentsUITests: XCTestCase {
         do {
             try await InboundAppIntentHandoff.writeAndOpen(
                 write: { failedStorage.write(failedEnvelope) },
-                discardIfCurrent: { failedStorage.discardIfCurrent($0) },
+                discardWrittenPayload: { failedStorage.discardWrittenPayload($0) },
                 open: { false }
             )
             XCTFail("A failed route open must report the degraded handoff")
@@ -371,7 +503,7 @@ final class AppIntentsUITests: XCTestCase {
         do {
             try await InboundAppIntentHandoff.writeAndOpen(
                 write: { storage.write(payload: identicalPayload, handoffID: written) },
-                discardIfCurrent: { storage.discardIfCurrent($0) },
+                discardWrittenPayload: { storage.discardWrittenPayload($0) },
                 open: {
                     storage.write(payload: identicalPayload, handoffID: replacement)
                     return false
@@ -384,6 +516,7 @@ final class AppIntentsUITests: XCTestCase {
             XCTFail("Expected typed route-open failure, got \(error)")
         }
 
+        XCTAssertFalse(storage.contains(written), "Failed-open cleanup should remove only the predecessor's unique payload")
         XCTAssertEqual(storage.current?.handoffID, replacement, "Failure cleanup must not erase an identical-content newer invocation")
     }
 
@@ -598,23 +731,37 @@ private final class HandoffStorageProbe {
         let handoffID: UUID
     }
 
-    private(set) var current: Entry?
+    private var payloads: [UUID: Data] = [:]
+    private var currentHandoffID: UUID?
+
+    var current: Entry? {
+        guard let currentHandoffID,
+              let payload = payloads[currentHandoffID] else {
+            return nil
+        }
+        return Entry(payload: payload, handoffID: currentHandoffID)
+    }
 
     @discardableResult
     func write(_ handoffID: UUID) -> UUID {
-        current = Entry(payload: Data(), handoffID: handoffID)
+        payloads[handoffID] = Data()
+        currentHandoffID = handoffID
         return handoffID
     }
 
     @discardableResult
     func write(payload: Data, handoffID: UUID) -> UUID {
-        current = Entry(payload: payload, handoffID: handoffID)
+        payloads[handoffID] = payload
+        currentHandoffID = handoffID
         return handoffID
     }
 
-    func discardIfCurrent(_ handoffID: UUID) {
-        guard current?.handoffID == handoffID else { return }
-        current = nil
+    func discardWrittenPayload(_ handoffID: UUID) {
+        payloads[handoffID] = nil
+    }
+
+    func contains(_ handoffID: UUID) -> Bool {
+        payloads[handoffID] != nil
     }
 }
 
@@ -649,4 +796,30 @@ private actor ReadinessGateProbe {
     }
 
     var didGenerate: Bool { didStartGeneration }
+}
+
+private actor DeliveryAcknowledgementProbe {
+    private var isWaiting = false
+    private var isReleased = false
+    private var waitingContinuation: CheckedContinuation<Void, Never>?
+    private var releaseContinuation: CheckedContinuation<Void, Never>?
+
+    func waitForRelease() async {
+        isWaiting = true
+        waitingContinuation?.resume()
+        waitingContinuation = nil
+        guard !isReleased else { return }
+        await withCheckedContinuation { releaseContinuation = $0 }
+    }
+
+    func waitUntilWaiting() async {
+        guard !isWaiting else { return }
+        await withCheckedContinuation { waitingContinuation = $0 }
+    }
+
+    func release() {
+        isReleased = true
+        releaseContinuation?.resume()
+        releaseContinuation = nil
+    }
 }

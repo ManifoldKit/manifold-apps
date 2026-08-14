@@ -30,6 +30,8 @@ enum AppIntentsFeature: AppFeature {
     static let pendingPayloadBuffer = PendingPayloadBuffer()
     private static var deliveryTask: Task<Void, Never>?
     private static var deliveryTaskID: UUID?
+    private static var stagedPayloadGeneration: UUID?
+    private static var activeDeliveryGeneration: UUID?
     private(set) static var inboundHandoffStatus = "No inbound AppIntent payload staged."
 
     /// Startup-phase hook called as soon as the composition root has created
@@ -51,7 +53,7 @@ enum AppIntentsFeature: AppFeature {
     /// published; malformed data is cleared and reported instead of replayed.
     static func stageInboundPayloadDuringStartup() async {
         InboundAppIntentEnvelopeStore.seedUITestEnvelopeIfRequested()
-        await stageInboundPayload(InboundAppIntentEnvelopeStore.take())
+        _ = await stageInboundPayload(InboundAppIntentEnvelopeStore.take())
     }
 
     /// UI-test-only seed for the warm URL contract. It deliberately writes
@@ -79,7 +81,7 @@ enum AppIntentsFeature: AppFeature {
     /// the production handoff that gets its envelope into the already-installed
     /// readiness delivery loop.
     static func stageAndDeliverInboundPayloadAfterActivation(into env: AppEnvironment) async {
-        guard await stageInboundPayload(InboundAppIntentEnvelopeStore.take()) else { return }
+        guard await stageInboundPayload(InboundAppIntentEnvelopeStore.take()) != nil else { return }
         install(into: env)
     }
 
@@ -87,46 +89,58 @@ enum AppIntentsFeature: AppFeature {
     /// testable with a synthetic App Group result. The URL handoff above
     /// always supplies the real store result.
     @discardableResult
-    static func stageInboundPayload(_ result: InboundAppIntentEnvelopeStore.TakeResult) async -> Bool {
+    static func stageInboundPayload(_ result: InboundAppIntentEnvelopeStore.TakeResult) async -> UUID? {
         switch result {
         case .empty:
             inboundHandoffStatus = "No inbound AppIntent payload staged."
-            return false
+            return nil
         case .payload(let payload):
-            await pendingPayloadBuffer.store(payload)
+            let generation = await pendingPayloadBuffer.store(payload)
+            stagedPayloadGeneration = generation
             inboundHandoffStatus = "Inbound AppIntent payload buffered until model readiness."
-            return true
+            return generation
         case .malformed(let error):
             inboundHandoffStatus = "Malformed inbound AppIntent payload discarded."
             Log.ui.warning("AppIntentsFeature: malformed inbound envelope discarded: \(String(describing: error), privacy: .public)")
-            return false
+            return nil
         case .appGroupUnavailable:
             inboundHandoffStatus = "App Group unavailable; inbound AppIntent handoff disabled."
             Log.ui.error("AppIntentsFeature: App Group '\(ManifoldAppGroup.identifier, privacy: .public)' unavailable")
-            return false
+            return nil
         }
     }
 
     static func install(into env: AppEnvironment) {
+        guard let generation = stagedPayloadGeneration else { return }
+        if activeDeliveryGeneration == generation, deliveryTask != nil {
+            return
+        }
         deliveryTask?.cancel()
         let taskID = UUID()
         deliveryTaskID = taskID
+        activeDeliveryGeneration = generation
         let readinessUpdates = env.bootstrap.inferenceService.modelLoadReadinessUpdates()
         deliveryTask = Task { @MainActor in
             defer {
                 if deliveryTaskID == taskID {
                     deliveryTask = nil
                     deliveryTaskID = nil
+                    activeDeliveryGeneration = nil
                 }
             }
-            guard let generation = await pendingPayloadBuffer.currentGeneration() else { return }
             await pendingPayloadBuffer.deliverWhenModelReady(
                 generation: generation,
                 readinessUpdates: readinessUpdates
             ) { payload in
-                guard !Task.isCancelled else { return }
+                // RootView may replace this task immediately after bootstrap.
+                // Do not acknowledge until the live view model accepted the
+                // payload; the buffer retains it for the replacement task if
+                // cancellation wins before ingestion begins or before that
+                // ingestion acknowledges completion.
+                guard !Task.isCancelled else { return false }
                 await env.viewModel.ingest(payload)
                 inboundHandoffStatus = "Inbound AppIntent payload delivered after model readiness."
+                return true
             }
         }
     }

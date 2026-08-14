@@ -58,6 +58,17 @@ struct InboundPayloadEnvelope: Codable, Sendable {
 /// file lives in. If you rename either constant, update the other.
 enum ManifoldAppGroup {
     static let identifier = "group.com.manifoldkit.apps"
-    static let inboundKey = "manifold.inbound"
+    /// Points to the most recently written inbound envelope ID. Its payload
+    /// is stored under ``inboundPayloadKey(_:)`` so cleanup never has to
+    /// compare-and-delete this shared pointer across processes.
+    static let inboundKey = "manifold.inbound.pointer"
+    /// Pre-token handoff slot used by the first AppIntents implementation.
+    /// Readers consume it only when no current pointer exists.
+    static let legacyInboundKey = "manifold.inbound"
+
+    static func inboundPayloadKey(_ handoffID: UUID) -> String {
+        "manifold.inbound.\(handoffID.uuidString)"
+    }
+
     static let pendingShareKey = "manifold.pending-share"
 }

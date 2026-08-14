@@ -20,11 +20,13 @@ actor PendingPayloadBuffer {
         case waitingForModel
         case delivering
         case delivered
+        case deliveryUnacknowledged
         case readinessStreamEnded
     }
 
     private var pending: InboundPayload?
     private var pendingGeneration: UUID?
+    private var deliveryClaimGeneration: UUID?
     private var deliveryState: DeliveryState = .idle
 
     /// Stores `payload`, replacing any previously-buffered payload, and
@@ -54,33 +56,54 @@ actor PendingPayloadBuffer {
         return value
     }
 
-    func currentGeneration() -> UUID? {
-        pendingGeneration
-    }
-
     /// Holds the payload through `.idle` and `.loading` lifecycle states and
-    /// consumes it only after the published InferenceService readiness stream
-    /// reaches `.ready`. A stream that ends without readiness leaves the
-    /// payload buffered for a later installation attempt.
+    /// asks its delivery closure to ingest it only after the published
+    /// InferenceService readiness stream reaches `.ready`. The exact payload
+    /// remains buffered until that closure acknowledges ingestion, so a
+    /// replacement task cancelled between readiness and `ChatViewModel.ingest`
+    /// cannot lose the cold-start envelope. A stream that ends without
+    /// readiness also leaves the payload buffered for a later installation.
     func deliverWhenModelReady(
         generation: UUID,
         readinessUpdates: AsyncStream<ModelLoadReadinessState>,
-        deliver: @MainActor @Sendable (InboundPayload) async -> Void
+        deliver: @MainActor @Sendable (InboundPayload) async -> Bool
     ) async {
         guard !Task.isCancelled, pendingGeneration == generation else { return }
+        // Awaiting the acknowledgement closure re-enters this actor. Claim
+        // the generation first so a duplicate install cannot hand the same
+        // pending payload to a second closure while the first is suspended.
+        guard deliveryClaimGeneration != generation else { return }
+        deliveryClaimGeneration = generation
+        defer {
+            if deliveryClaimGeneration == generation {
+                deliveryClaimGeneration = nil
+            }
+        }
         deliveryState = .waitingForModel
 
         for await readiness in readinessUpdates {
             guard !Task.isCancelled else { return }
             guard readiness == .ready else { continue }
             // A later store changes `pendingGeneration` before its caller can
-            // cancel this task. Do the token check inside the actor directly
-            // before drain, so the predecessor can never consume the newer
-            // single-slot payload.
+            // cancel this task. Check inside the actor before handing the
+            // payload out, so a predecessor can never deliver a replacement.
             guard pendingGeneration == generation else { return }
-            guard let payload = drain() else { return }
+            guard let payload = pending else { return }
             deliveryState = .delivering
-            await deliver(payload)
+            let didIngest = await deliver(payload)
+            guard didIngest else {
+                // In particular, a task canceled after `.ready` but before
+                // the closure acknowledges ingestion leaves the payload for
+                // the replacement installation task.
+                if pendingGeneration == generation {
+                    deliveryState = .deliveryUnacknowledged
+                }
+                return
+            }
+            // The closure may suspend while a newer warm route stores a
+            // replacement. An acknowledged predecessor must not drain it.
+            guard pendingGeneration == generation else { return }
+            _ = drain()
             deliveryState = .delivered
             return
         }
