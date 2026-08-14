@@ -16,7 +16,8 @@ fail() {
 display_model_name() {
   local path="$1"
   local name="$(basename "$path")"
-  if [[ "${name##*.}" == "gguf" ]]; then
+  local extension="$(printf '%s' "${name##*.}" | tr '[:upper:]' '[:lower:]')"
+  if [[ "$extension" == "gguf" ]]; then
     name="${name%.*}"
   fi
   name="${name//-/ }"
