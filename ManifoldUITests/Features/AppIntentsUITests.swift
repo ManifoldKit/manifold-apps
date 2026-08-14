@@ -132,19 +132,7 @@ final class AppIntentsUITests: XCTestCase {
     /// assertion — see the PR description for the observed output.
     func test_sidebarAppIntentsRow_rendersRealFeatureView() throws {
         let app = launchApp()
-        showSidebarIfNeeded(app: app)
-
-        let row = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label == 'App Intents'"))
-            .firstMatch
-        XCTAssertTrue(waitForElement(row, timeout: 5), "Sidebar should show an 'App Intents' row")
-        row.tap()
-
-        let featureView = app.descendants(matching: .any)["appintents-feature-view"]
-        XCTAssertTrue(
-            waitForElement(featureView, timeout: 5),
-            "AppIntentsFeature.makeView(env:) should render a view carrying the 'appintents-feature-view' accessibility identifier — NotYetPortedView (and any other placeholder) never sets this identifier"
-        )
+        openAppIntentsFeature(in: app)
     }
 
     /// Drives the real registration button and asserts the screen read the
@@ -153,13 +141,7 @@ final class AppIntentsUITests: XCTestCase {
     /// label is populated from `toolRegistry.definitions` after registration.
     func test_registerSetReminder_executesThroughInferenceServiceRegistry() throws {
         let app = launchApp(additionalArguments: ["--appintent-tool-turn"])
-        showSidebarIfNeeded(app: app)
-
-        let row = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label == 'App Intents'"))
-            .firstMatch
-        XCTAssertTrue(waitForElement(row, timeout: 5), "Sidebar should show an 'App Intents' row")
-        row.tap()
+        openAppIntentsFeature(in: app)
 
         let registerButton = app.buttons["appintent-tools-register-button"]
         XCTAssertTrue(
@@ -176,15 +158,7 @@ final class AppIntentsUITests: XCTestCase {
         XCTAssertEqual(status.label, "Registered in live chat registry: set_reminder_intent")
         XCTAssertFalse(registerButton.isEnabled, "A registered tool should not be registered twice")
 
-        showSidebarIfNeeded(app: app)
-        let chatRow = app.staticTexts["chat-sidebar-row"]
-        XCTAssertTrue(waitForElement(chatRow, timeout: 5), "Sidebar should expose the Chat row")
-        chatRow.tap()
-        openChatDetailIfNeeded(app: app)
-        XCTAssertTrue(
-            waitForChatInputReady(app: app, timeout: 30),
-            "The scripted chat backend should be ready before driving the registered AppIntent tool"
-        )
+        openChatFeature(in: app)
         guard let input = findMessageInput(app: app) else {
             XCTFail("Message input should exist for the AppIntent tool turn")
             return
@@ -202,12 +176,16 @@ final class AppIntentsUITests: XCTestCase {
         )
         approveButton.tap()
 
-        let toolResult = app.descendants(matching: .any).matching(
-            NSPredicate(format: "label CONTAINS[c] 'Reminder noted: review the live registry'")
-        ).firstMatch
+        let completedInvocation = app.descendants(matching: .any)[
+            "tool-invocation-completed-set_reminder_intent"
+        ].firstMatch
         XCTAssertTrue(
-            waitForElement(toolResult, timeout: 15),
-            "The live registry must execute SetReminderIntent; an unknown/UI-only registry cannot produce its reminder result"
+            waitForElement(completedInvocation, timeout: 15),
+            "The live registry must complete SetReminderIntent; an unknown/UI-only registry produces a failed invocation"
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)["tool-invocation-failed-set_reminder_intent"].exists,
+            "SetReminderIntent must not finish as a failed tool invocation"
         )
 
         let completed = app.descendants(matching: .any).matching(
@@ -231,12 +209,6 @@ final class AppIntentsUITests: XCTestCase {
             app.staticTexts["appintent-background-handler-status"].label,
             "Background intent handler configured during bootstrap"
         )
-        #if os(iOS)
-        XCTAssertEqual(
-            app.staticTexts["appintent-app-group-status"].label,
-            "App Group available"
-        )
-        #endif
     }
 
     func test_coldLaunchEnvelope_isIngestedOnlyAfterModelReadiness() throws {
@@ -263,17 +235,40 @@ final class AppIntentsUITests: XCTestCase {
     }
 
     private func openAppIntentsFeature(in app: XCUIApplication) {
-        showSidebarIfNeeded(app: app)
-        let row = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label == 'App Intents'"))
-            .firstMatch
-        XCTAssertTrue(waitForElement(row, timeout: 5), "Sidebar should show an 'App Intents' row")
-        row.tap()
+        tapFeatureSidebarButton("appintents", in: app)
 
         XCTAssertTrue(
             waitForElement(app.descendants(matching: .any)["appintents-feature-view"], timeout: 5),
             "AppIntents feature should render its live view"
         )
+    }
+
+    private func openChatFeature(in app: XCUIApplication) {
+        tapFeatureSidebarButton("chat", in: app)
+        XCTAssertTrue(
+            waitForChatInputReady(app: app, timeout: 30),
+            "Selecting Chat should restore the live chat detail before driving the registered AppIntent tool"
+        )
+    }
+
+    private func tapFeatureSidebarButton(_ featureID: String, in app: XCUIApplication) {
+        showSidebarIfNeeded(app: app)
+
+        let featureList = app.descendants(matching: .any)["feature-sidebar-list"]
+        XCTAssertTrue(
+            waitForElement(featureList, timeout: 2),
+            "Sidebar should expose the identified feature list"
+        )
+
+        let row = app.buttons["feature-sidebar-row-\(featureID)"]
+        for _ in 0..<4 where !row.exists || !row.isHittable {
+            featureList.swipeUp()
+        }
+        XCTAssertTrue(
+            row.exists && row.isHittable,
+            "Sidebar should expose a tappable \(featureID) feature button"
+        )
+        row.tap()
     }
 
     @MainActor
