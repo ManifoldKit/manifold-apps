@@ -94,6 +94,11 @@ struct RootView: View {
             for feature in featureTypes {
                 feature.install(into: env)
             }
+            // This is a test-only write guarded by `--uitesting`; it happens
+            // after bootstrap and is intentionally not staged here. The warm
+            // AppIntents UI regression must exercise the real `onOpenURL`
+            // handoff below to consume it.
+            AppIntentsFeature.seedWarmInboundPayloadForUITestIfRequested()
         }
         .onChange(of: selectedFeatureID) { oldValue, newValue in
             if newValue != nil { showCompactDetail() }
@@ -110,6 +115,12 @@ struct RootView: View {
             Task { await env.viewModel.switchToSession(newSession) }
         }
         #if os(iOS)
+        .onOpenURL { url in
+            guard AppIntentsFeature.isInboundAppIntentURL(url) else { return }
+            Task {
+                await AppIntentsFeature.stageAndDeliverInboundPayloadAfterActivation(into: env)
+            }
+        }
         .onChange(of: horizontalSizeClass) { _, newSizeClass in
             guard newSizeClass != .compact else { return }
             columnVisibility = .automatic

@@ -35,6 +35,7 @@ final class AppEnvironment {
     let sessionManager: SessionManagerViewModel
     let toolRegistry: ToolRegistry
     let toolApprovalGate: UIToolApprovalGate
+    let backgroundIntentHandlerConfiguredAtStartup: Bool
     var themePreset: ThemingPreset = .standard
 
     var theme: ManifoldTheme {
@@ -46,13 +47,15 @@ final class AppEnvironment {
         viewModel: ChatViewModel,
         sessionManager: SessionManagerViewModel,
         toolRegistry: ToolRegistry,
-        toolApprovalGate: UIToolApprovalGate
+        toolApprovalGate: UIToolApprovalGate,
+        backgroundIntentHandlerConfiguredAtStartup: Bool
     ) {
         self.bootstrap = bootstrap
         self.viewModel = viewModel
         self.sessionManager = sessionManager
         self.toolRegistry = toolRegistry
         self.toolApprovalGate = toolApprovalGate
+        self.backgroundIntentHandlerConfiguredAtStartup = backgroundIntentHandlerConfiguredAtStartup
     }
 
     /// Builds the composition root.
@@ -83,6 +86,11 @@ final class AppEnvironment {
     ) async throws -> AppEnvironment {
         let isUITesting = LaunchArguments.isUITesting
         let configuration = ManifoldConfiguration(appName: appName, bundleIdentifier: bundleIdentifier)
+
+        // Consume the cross-process App Group slot before bootstrap work. Its
+        // payload stays buffered until the readiness-driven delivery installed
+        // below observes a loaded model.
+        await AppIntentsFeature.stageInboundPayloadDuringStartup()
 
         // Constructed before InferenceService, on both paths below, so a
         // feature confined to Shared/Features/<Name>/ has something to
@@ -122,6 +130,13 @@ final class AppEnvironment {
                 toolApprovalGate: toolApprovalGate
             )
         }
+
+        // AskManifoldIntent runs in the background (`openAppWhenRun == false`)
+        // and may be invoked without RootView ever appearing. Configure its
+        // process-global handler at the earliest point its service exists.
+        let backgroundIntentHandlerConfiguredAtStartup = await AppIntentsFeature.configureBackgroundIntentHandler(
+            inferenceService: inferenceService
+        )
 
         // A ternary between two closure literals here (rather than an
         // if/else assigning to an explicitly-typed local) trips Swift 6's
@@ -194,7 +209,15 @@ final class AppEnvironment {
         if !isUITesting {
             viewModel.refreshModels()
             viewModel.autoSelectFirstRunModel()
-            viewModel.dispatchSelectedLoad()
+
+            // Startup owns this load and awaits it. Fire-and-forget
+            // dispatchSelectedLoad() allowed RootView's inbound handoff to race
+            // the unloaded-model guard in ChatViewModel.ingest(_:) (#6 review).
+            if viewModel.selectedEndpoint != nil {
+                await viewModel.loadSelectedEndpoint()
+            } else if viewModel.selectedModel != nil {
+                await viewModel.loadSelectedModel()
+            }
         }
 
         if LaunchArguments.showsAPIKeyRecovery {
@@ -205,13 +228,20 @@ final class AppEnvironment {
             )
         }
 
-        return AppEnvironment(
+        let environment = AppEnvironment(
             bootstrap: bootstrap,
             viewModel: viewModel,
             sessionManager: sessionManager,
             toolRegistry: toolRegistry,
-            toolApprovalGate: toolApprovalGate
+            toolApprovalGate: toolApprovalGate,
+            backgroundIntentHandlerConfiguredAtStartup: backgroundIntentHandlerConfiguredAtStartup
         )
+        // Install before returning the composition root to SwiftUI. The
+        // readiness stream immediately yields `.ready` for the scripted path,
+        // and holds production payloads through idle/loading until a later
+        // successful model selection.
+        AppIntentsFeature.install(into: environment)
+        return environment
     }
 
     /// Refreshes the model switcher's cloud rows after the endpoint manager
@@ -230,6 +260,15 @@ final class AppEnvironment {
     /// turn loop treats as "no more tool calls, stop" rather than an error,
     /// so running out mid-session is harmless.
     private static var uiTestTurns: [ScriptedBackend.Turn] {
+        if LaunchArguments.runsAppIntentToolTurn {
+            return [
+                .toolCall(
+                    name: "set_reminder_intent",
+                    arguments: #"{"text":"review the live registry"}"#
+                ),
+                .tokens(["Reminder", " completed", " through", " the", " live", " registry", "."]),
+            ]
+        }
         return [
             .tokens(["Hello", " from", " the", " scripted", " UI-test", " backend", "."]),
             .tokens(["Sure", ",", " happy", " to", " help", "."]),
