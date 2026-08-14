@@ -10,6 +10,13 @@ enum LaunchArguments {
         CommandLine.arguments.contains("--uitesting")
     }
 
+    /// Enables the macOS Studio local-model UI regression fixture. This stays
+    /// nested under `--uitesting` so production never receives synthetic
+    /// models or a scripted local-model factory.
+    static var runsStudioLocalModelTest: Bool {
+        isUITesting && CommandLine.arguments.contains("--studio-local-model-test")
+    }
+
     /// Seeds ChatView's real API-key recovery banner for the endpoint-store
     /// UI regression. Kept separate from `--uitesting` so the smoke suite's
     /// normal launch state is unchanged.

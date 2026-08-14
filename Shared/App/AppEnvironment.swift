@@ -2,6 +2,10 @@ import Foundation
 import SwiftData
 import ManifoldKit
 import ManifoldTools
+#if os(macOS)
+import ManifoldMLX
+import ManifoldLlama
+#endif
 
 /// The composition root shared by `Manifold` (iOS) and `ManifoldStudio`
 /// (macOS): owns the bootstrapped ManifoldKit stack (inference, persistence,
@@ -105,7 +109,7 @@ final class AppEnvironment {
         let toolApprovalGate = UIToolApprovalGate(policy: .askOncePerSession)
 
         let inferenceService: InferenceService
-        if isUITesting {
+        if isUITesting && !LaunchArguments.runsStudioLocalModelTest {
             let backend: any InferenceBackend
             let backendName: String
             if LaunchArguments.runsToolApprovalFlow {
@@ -159,10 +163,30 @@ final class AppEnvironment {
             makeModelContainer: makeModelContainer
         )
 
-        if !isUITesting {
+        if !isUITesting || LaunchArguments.runsStudioLocalModelTest {
             OllamaBackends.register(with: inferenceService)
             CloudSaaSBackends.register(with: inferenceService)
             FoundationBackends.register(with: inferenceService)
+            #if os(macOS)
+            // Keep this factory ahead of the companion registrars. The core
+            // lifecycle asks factories in registration order, so the Studio UI
+            // suite drives its normal local-model load path with a deterministic
+            // ScriptedBackend rather than constructing MLX/llama engines or
+            // touching fixture paths. The real registrars still follow, proving
+            // the production companion wiring can coexist with that test seam.
+            if LaunchArguments.runsStudioLocalModelTest {
+                inferenceService.registerBackendFactory { modelType in
+                    switch modelType {
+                    case .mlx, .gguf:
+                        ScriptedBackend(turns: uiTestTurns)
+                    default:
+                        nil
+                    }
+                }
+            }
+            MLXBackends.register(with: inferenceService)
+            LlamaBackends.register(with: inferenceService)
+            #endif
         }
 
         let viewModel = ChatViewModel(
@@ -171,6 +195,15 @@ final class AppEnvironment {
             conversationRuntime: bootstrap.conversationRuntime
         )
         viewModel.configure(bootstrap: bootstrap)
+
+        if LaunchArguments.runsStudioLocalModelTest {
+            // The fixture lives only in the test registry; no files are created
+            // and `ScriptedBackend.loadModel` deliberately ignores these URLs.
+            // Both formats must be visibly compatible before the UI can prove
+            // that RootView dispatches a real load rather than only selecting a
+            // switcher row.
+            viewModel.modelRegistry.availableModels = Self.studioLocalModelFixtures
+        }
 
         // `ChatViewModel` does not fetch the consumer-owned EndpointStore
         // automatically. Populate it before session restoration so a saved
@@ -273,6 +306,28 @@ final class AppEnvironment {
             .tokens(["Hello", " from", " the", " scripted", " UI-test", " backend", "."]),
             .tokens(["Sure", ",", " happy", " to", " help", "."]),
             .tokens(["Got", " it", "."]),
+        ]
+    }
+
+    /// Small, deterministic local-model catalogue used exclusively by the
+    /// Studio macOS UI target. Tiny declared sizes keep the genuine load-plan
+    /// path in its allowed state while never requiring an actual model asset.
+    private static var studioLocalModelFixtures: [ModelInfo] {
+        [
+            ModelInfo(
+                name: "Studio Fixture MLX",
+                fileName: "studio-fixture-mlx",
+                url: URL(fileURLWithPath: "/tmp/manifold-studio-fixture-mlx"),
+                fileSize: 1,
+                modelType: .mlx
+            ),
+            ModelInfo(
+                name: "Studio Fixture GGUF",
+                fileName: "studio-fixture-gguf.gguf",
+                url: URL(fileURLWithPath: "/tmp/manifold-studio-fixture-gguf.gguf"),
+                fileSize: 1,
+                modelType: .gguf
+            ),
         ]
     }
 }

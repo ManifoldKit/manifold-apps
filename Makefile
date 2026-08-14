@@ -19,18 +19,26 @@ build: generate
 		-project Manifold.xcodeproj \
 		-scheme Manifold \
 		-destination '$(IOS_DESTINATION)' \
+		-skipPackagePluginValidation \
 		CODE_SIGNING_ALLOWED=NO
 	xcodebuild build \
 		-project Manifold.xcodeproj \
 		-scheme ManifoldStudio \
 		-destination 'platform=macOS' \
+		-skipPackagePluginValidation \
 		CODE_SIGNING_ALLOWED=NO
 
 test: generate
 	xcodebuild test \
 		-project Manifold.xcodeproj \
 		-scheme Manifold \
-		-destination '$(IOS_DESTINATION)'
+		-destination '$(IOS_DESTINATION)' \
+		-skipPackagePluginValidation
+	xcodebuild test \
+		-project Manifold.xcodeproj \
+		-scheme ManifoldStudio \
+		-destination 'platform=macOS' \
+		-skipPackagePluginValidation
 
 clean:
 	rm -rf Manifold.xcodeproj DerivedData .build

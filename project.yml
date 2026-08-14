@@ -16,6 +16,12 @@ packages:
   ManifoldKit:
     url: https://github.com/ManifoldKit/ManifoldKit
     minorVersion: 0.75.0
+  ManifoldMLX:
+    url: https://github.com/ManifoldKit/manifold-mlx
+    minorVersion: 0.5.0
+  ManifoldLlama:
+    url: https://github.com/ManifoldKit/manifold-llama
+    minorVersion: 0.4.3
 
 targets:
   Manifold:
@@ -67,6 +73,10 @@ targets:
         product: ManifoldUIModelManagement
       - package: ManifoldKit
         product: ManifoldAppIntents
+      - package: ManifoldMLX
+        product: ManifoldMLX
+      - package: ManifoldLlama
+        product: ManifoldLlama
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.manifoldkit.ManifoldStudio
@@ -106,6 +116,20 @@ targets:
         SWIFT_VERSION: "6.0"
         GENERATE_INFOPLIST_FILE: YES
 
+  ManifoldStudioUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - ManifoldStudioUITests
+      - ManifoldUITests/UITestHelpers.swift
+    dependencies:
+      - target: ManifoldStudio
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.manifoldkit.ManifoldStudioUITests
+        SWIFT_VERSION: "6.0"
+        GENERATE_INFOPLIST_FILE: YES
+
 schemes:
   Manifold:
     build:
@@ -123,6 +147,10 @@ schemes:
     build:
       targets:
         ManifoldStudio: all
+        ManifoldStudioUITests: [test]
+    test:
+      targets:
+        - ManifoldStudioUITests
     run:
       config: Debug
     archive:
