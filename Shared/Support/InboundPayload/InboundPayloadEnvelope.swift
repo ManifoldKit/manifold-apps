@@ -16,27 +16,31 @@ import ManifoldInference
 /// envelopes written before the field existed still decode without
 /// migration. `handoffID` follows the same rule: each new write has a unique
 /// compare-and-remove token, while legacy envelopes receive an ephemeral ID
-/// when decoded.
+/// when decoded. `createdAt` lets the handoff store prune abandoned payload
+/// keys; legacy envelopes are conservatively treated as expired.
 struct InboundPayloadEnvelope: Codable, Sendable {
     var prompt: String
     var attachments: [MessagePart]
     var source: String
     var handoffID: UUID
+    var createdAt: Date
 
     init(
         prompt: String,
         attachments: [MessagePart] = [],
         source: String,
-        handoffID: UUID = UUID()
+        handoffID: UUID = UUID(),
+        createdAt: Date = Date()
     ) {
         self.prompt = prompt
         self.attachments = attachments
         self.source = source
         self.handoffID = handoffID
+        self.createdAt = createdAt
     }
 
     private enum CodingKeys: String, CodingKey {
-        case prompt, attachments, source, handoffID
+        case prompt, attachments, source, handoffID, createdAt
     }
 
     init(from decoder: any Decoder) throws {
@@ -45,6 +49,7 @@ struct InboundPayloadEnvelope: Codable, Sendable {
         self.attachments = try container.decodeIfPresent([MessagePart].self, forKey: .attachments) ?? []
         self.source = try container.decode(String.self, forKey: .source)
         self.handoffID = try container.decodeIfPresent(UUID.self, forKey: .handoffID) ?? UUID()
+        self.createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? .distantPast
     }
 }
 

@@ -22,6 +22,7 @@ final class AppIntentsUITests: XCTestCase {
         XCTAssertEqual(decoded.source, "appIntent")
         XCTAssertTrue(decoded.attachments.isEmpty)
         XCTAssertEqual(decoded.handoffID, envelope.handoffID)
+        XCTAssertEqual(decoded.createdAt, envelope.createdAt)
     }
 
     func test_envelope_roundTripsAttachmentsEndToEnd() throws {
@@ -39,6 +40,7 @@ final class AppIntentsUITests: XCTestCase {
         XCTAssertEqual(decoded.source, "shareExtension")
         XCTAssertEqual(decoded.attachments, attachments)
         XCTAssertEqual(decoded.handoffID, envelope.handoffID)
+        XCTAssertEqual(decoded.createdAt, envelope.createdAt)
     }
 
     func test_envelope_decodesLegacyShapeWithoutAttachmentsField() throws {
@@ -53,7 +55,10 @@ final class AppIntentsUITests: XCTestCase {
         XCTAssertTrue(decoded.attachments.isEmpty)
         // Legacy envelopes did not carry a compare-and-remove token. Decoding
         // still succeeds and assigns one for the in-process representation.
+        // Its unknown creation time is conservatively expired so a stale
+        // orphan cannot execute after an upgrade.
         XCTAssertFalse(decoded.handoffID.uuidString.isEmpty)
+        XCTAssertEqual(decoded.createdAt, .distantPast)
     }
 
     func test_envelope_emitsAttachmentsKeyWhenNonEmpty() throws {
@@ -69,6 +74,121 @@ final class AppIntentsUITests: XCTestCase {
         XCTAssertNotNil(object?["attachments"])
         XCTAssertEqual((object?["attachments"] as? [Any])?.count, 1)
         XCTAssertEqual(object?["handoffID"] as? String, envelope.handoffID.uuidString)
+        XCTAssertNotNil(object?["createdAt"])
+    }
+
+    // MARK: - App Group pointer recovery
+
+    func test_envelopeStore_failedLaterWriterDoesNotMaskEarlierPayload() throws {
+        guard let defaults = makeIsolatedEnvelopeDefaults() else {
+            XCTFail("An isolated UserDefaults suite is required for the handoff store test")
+            return
+        }
+        let now = Date(timeIntervalSinceReferenceDate: 1_000_000)
+        let earlier = InboundPayloadEnvelope(prompt: "A", source: "appIntent", createdAt: now.addingTimeInterval(-1))
+        let failedLater = InboundPayloadEnvelope(prompt: "B", source: "appIntent", createdAt: now)
+        try InboundAppIntentEnvelopeStore.write(earlier, to: defaults)
+        try InboundAppIntentEnvelopeStore.write(failedLater, to: defaults)
+        InboundAppIntentEnvelopeStore.discardWrittenPayload(failedLater.handoffID, from: defaults)
+
+        let result = InboundAppIntentEnvelopeStore.take(
+            from: defaults,
+            now: now,
+            maximumAge: InboundAppIntentEnvelopeStore.maximumEnvelopeAge
+        )
+        XCTAssertEqual(prompt(in: result), "A")
+    }
+
+    func test_envelopeStore_takesCurrentThenRecoversEarlierFreshPayload() throws {
+        guard let defaults = makeIsolatedEnvelopeDefaults() else {
+            XCTFail("An isolated UserDefaults suite is required for the handoff store test")
+            return
+        }
+        let now = Date(timeIntervalSinceReferenceDate: 1_000_000)
+        let earlier = InboundPayloadEnvelope(prompt: "A", source: "appIntent", createdAt: now.addingTimeInterval(-2))
+        let current = InboundPayloadEnvelope(prompt: "B", source: "appIntent", createdAt: now.addingTimeInterval(-1))
+        try InboundAppIntentEnvelopeStore.write(earlier, to: defaults)
+        try InboundAppIntentEnvelopeStore.write(current, to: defaults)
+
+        let first = InboundAppIntentEnvelopeStore.take(
+            from: defaults,
+            now: now,
+            maximumAge: InboundAppIntentEnvelopeStore.maximumEnvelopeAge
+        )
+        let second = InboundAppIntentEnvelopeStore.take(
+            from: defaults,
+            now: now,
+            maximumAge: InboundAppIntentEnvelopeStore.maximumEnvelopeAge
+        )
+        XCTAssertEqual(prompt(in: first), "B")
+        XCTAssertEqual(prompt(in: second), "A")
+    }
+
+    func test_envelopeStore_prunesExpiredOrphanWithoutDeliveringIt() throws {
+        guard let defaults = makeIsolatedEnvelopeDefaults() else {
+            XCTFail("An isolated UserDefaults suite is required for the handoff store test")
+            return
+        }
+        let now = Date(timeIntervalSinceReferenceDate: 1_000_000)
+        let expired = InboundPayloadEnvelope(
+            prompt: "expired",
+            source: "appIntent",
+            createdAt: now.addingTimeInterval(-InboundAppIntentEnvelopeStore.maximumEnvelopeAge - 1)
+        )
+        try InboundAppIntentEnvelopeStore.write(expired, to: defaults)
+
+        let result = InboundAppIntentEnvelopeStore.take(
+            from: defaults,
+            now: now,
+            maximumAge: InboundAppIntentEnvelopeStore.maximumEnvelopeAge
+        )
+        XCTAssertNil(prompt(in: result))
+        XCTAssertNil(defaults.data(forKey: ManifoldAppGroup.inboundPayloadKey(expired.handoffID)))
+    }
+
+    func test_envelopeStore_reportsMalformedCurrentPointer() {
+        guard let defaults = makeIsolatedEnvelopeDefaults() else {
+            XCTFail("An isolated UserDefaults suite is required for the handoff store test")
+            return
+        }
+        let handoffID = UUID()
+        defaults.set(Data("not-json".utf8), forKey: ManifoldAppGroup.inboundPayloadKey(handoffID))
+        defaults.set(handoffID.uuidString, forKey: ManifoldAppGroup.inboundKey)
+
+        let result = InboundAppIntentEnvelopeStore.take(
+            from: defaults,
+            now: Date(timeIntervalSinceReferenceDate: 1_000_000),
+            maximumAge: InboundAppIntentEnvelopeStore.maximumEnvelopeAge
+        )
+        guard case .malformed = result else {
+            XCTFail("Malformed current pointer payload must remain visibly reported")
+            return
+        }
+    }
+
+    func test_envelopeStore_consumesLegacyRawSlotOnceWithoutOrphanExpiry() {
+        guard let defaults = makeIsolatedEnvelopeDefaults() else {
+            XCTFail("An isolated UserDefaults suite is required for the handoff store test")
+            return
+        }
+        defaults.set(
+            Data(#"{"prompt":"legacy","source":"appIntent"}"#.utf8),
+            forKey: ManifoldAppGroup.legacyInboundKey
+        )
+
+        let now = Date(timeIntervalSinceReferenceDate: 1_000_000)
+        let first = InboundAppIntentEnvelopeStore.take(
+            from: defaults,
+            now: now,
+            maximumAge: InboundAppIntentEnvelopeStore.maximumEnvelopeAge
+        )
+        let second = InboundAppIntentEnvelopeStore.take(
+            from: defaults,
+            now: now,
+            maximumAge: InboundAppIntentEnvelopeStore.maximumEnvelopeAge
+        )
+        XCTAssertEqual(prompt(in: first), "legacy")
+        XCTAssertNil(prompt(in: second))
     }
 
     // MARK: - Readiness-aware delivery
@@ -700,6 +820,15 @@ final class AppIntentsUITests: XCTestCase {
             "Sidebar should expose a tappable \(featureID) feature button"
         )
         row.tap()
+    }
+
+    private func makeIsolatedEnvelopeDefaults() -> UserDefaults? {
+        UserDefaults(suiteName: "com.manifoldkit.AppIntentsUITests.\(UUID().uuidString)")
+    }
+
+    private func prompt(in result: InboundAppIntentEnvelopeStore.TakeResult) -> String? {
+        guard case .payload(let payload) = result else { return nil }
+        return payload.prompt
     }
 
     @MainActor
