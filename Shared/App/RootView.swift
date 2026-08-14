@@ -200,6 +200,7 @@ struct RootView: View {
                 .padding(.vertical, 12)
         }
         .buttonStyle(.plain)
+        .background(selectedFeatureID == id ? Color.accentColor.opacity(0.14) : Color.clear)
         .accessibilityAddTraits(selectedFeatureID == id ? .isSelected : [])
         .accessibilityIdentifier("feature-sidebar-row-\(id)")
     }

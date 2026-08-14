@@ -61,6 +61,11 @@ final class ThemingUITests: XCTestCase {
         )
 
         showSidebarIfNeeded(app: app)
+        let selectedThemingRow = app.buttons["feature-sidebar-row-theming"]
+        XCTAssertTrue(
+            waitForElement(selectedThemingRow, timeout: 5) && selectedThemingRow.isSelected,
+            "Reopened compact sidebar should expose Theming as the selected feature"
+        )
         let cloudRow = app.buttons["feature-sidebar-row-cloud"]
         XCTAssertTrue(
             waitForElement(cloudRow, timeout: 5) && cloudRow.isHittable,
