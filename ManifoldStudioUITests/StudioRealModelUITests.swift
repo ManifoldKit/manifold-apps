@@ -59,6 +59,11 @@ final class StudioRealModelUITests: XCTestCase {
 
     @MainActor
     func testLiveMLXToGGUFToMLXSwitchesAndGenerates() throws {
+        XCTAssertNotEqual(
+            mlxModelName.localizedLowercase,
+            ggufModelName.localizedLowercase,
+            "MLX and GGUF model rows must have distinct display identities"
+        )
         loadVerifyAndGenerate(
             model: mlxModelName,
             backend: "mlx",

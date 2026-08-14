@@ -13,6 +13,17 @@ fail() {
   exit 1
 }
 
+display_model_name() {
+  local path="$1"
+  local name="$(basename "$path")"
+  if [[ "${name##*.}" == "gguf" ]]; then
+    name="${name%.*}"
+  fi
+  name="${name//-/ }"
+  name="${name//_/ }"
+  printf '%s' "$name"
+}
+
 [[ -z "${CI:-}" ]] || fail "is a physical-model hardware gate and must not be run in CI."
 [[ "$(uname -m)" == "arm64" ]] || fail "requires an arm64 Mac; this host is $(uname -m)."
 command -v xcodebuild >/dev/null 2>&1 || fail "xcodebuild is unavailable; install full Xcode."
@@ -36,6 +47,10 @@ done < <(/usr/bin/find "$MLX_MODEL_PATH" -type f -name '*.safetensors' -print0)
 (( has_readable_safetensors == 1 )) || fail "MLX model has no readable .safetensors weights: $MLX_MODEL_PATH"
 
 [[ -f "$GGUF_MODEL_PATH" && -r "$GGUF_MODEL_PATH" ]] || fail "GGUF model is missing or unreadable: $GGUF_MODEL_PATH"
+
+MLX_DISPLAY_NAME="$(display_model_name "$MLX_MODEL_PATH" | tr '[:upper:]' '[:lower:]')"
+GGUF_DISPLAY_NAME="$(display_model_name "$GGUF_MODEL_PATH" | tr '[:upper:]' '[:lower:]')"
+[[ "$MLX_DISPLAY_NAME" != "$GGUF_DISPLAY_NAME" ]] || fail "MLX and GGUF model rows collide on display identity: '$MLX_DISPLAY_NAME'"
 
 MLX_MODEL_BYTES=0
 while IFS= read -r -d '' model_file; do
