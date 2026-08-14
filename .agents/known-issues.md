@@ -69,3 +69,12 @@ appear and then disappear, and fail if the approval sheet appears before that
 terminal state. A missing `xcrun --find metallib` result is not an app-build
 preflight; Xcode's package plugins can still compile and bundle the required
 Metal libraries, so the real load is the authoritative check.
+
+## macOS XCUITest hittability can lag element existence after launch
+
+On a hosted arm64 runner, `chat-model-switcher-chip` can enter the accessibility
+tree while its first `isHittable` snapshot is still false; a model-management
+button in the same app launch can become actionable moments later. Avoid a
+one-shot `waitForExistence(...) && isHittable` assertion before a real tap.
+Use a bounded predicate wait requiring both existence and hittability, without
+adding navigation gestures or other test-side repairs.

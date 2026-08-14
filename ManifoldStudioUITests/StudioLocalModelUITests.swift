@@ -20,7 +20,7 @@ final class StudioLocalModelUITests: XCTestCase {
     func testModelManagementButtonPresentsRealSheetAndTabPicker() throws {
         let button = app.descendants(matching: .any)["chat-model-management-button"]
         XCTAssertTrue(
-            button.waitForExistence(timeout: 10) && button.isHittable,
+            waitForHittable(button, timeout: 10),
             "The central chat model-management button should be reachable on Studio"
         )
         button.tap()
@@ -64,7 +64,7 @@ final class StudioLocalModelUITests: XCTestCase {
     private func openModelSwitcher() {
         let chip = app.descendants(matching: .any)["chat-model-switcher-chip"]
         XCTAssertTrue(
-            chip.waitForExistence(timeout: 10) && chip.isHittable,
+            waitForHittable(chip, timeout: 10),
             "Studio ChatView should expose the host-owned model switcher"
         )
         chip.tap()
@@ -72,7 +72,7 @@ final class StudioLocalModelUITests: XCTestCase {
 
     @MainActor
     private func loadAndAssertGeneration(row: XCUIElement, model: String, backend: String, prompt: String) {
-        XCTAssertTrue(row.waitForExistence(timeout: 5) && row.isHittable, "Fixture row should be tappable: \(model)")
+        XCTAssertTrue(waitForHittable(row, timeout: 10), "Fixture row should be tappable: \(model)")
         row.tap()
 
         // The macOS switcher is a popover that remains open after selection.
@@ -140,6 +140,18 @@ final class StudioLocalModelUITests: XCTestCase {
             predicate: NSPredicate { object, _ in
                 guard let element = object as? XCUIElement else { return false }
                 return element.exists && element.isEnabled
+            },
+            object: element
+        )
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+    }
+
+    @MainActor
+    private func waitForHittable(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate { object, _ in
+                guard let element = object as? XCUIElement else { return false }
+                return element.exists && element.isHittable
             },
             object: element
         )
