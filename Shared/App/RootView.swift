@@ -17,11 +17,28 @@ struct RootView: View {
     @State private var preferredCompactColumn: NavigationSplitViewColumn = .detail
     @State private var didInstallFeatures = false
 
-    /// Satisfies `ChatView`'s required binding. No `ModelManagementSheet` is
-    /// wired to it yet in this scaffold — Cmd+Shift+M and the model
-    /// switcher's "fix endpoint" affordance flip the flag, but nothing
-    /// currently observes it. A follow-up feature PR wires the sheet.
+    /// Satisfies `ChatView`'s required binding and drives the host-owned
+    /// `ModelManagementSheet` presentation.
     @State private var showModelManagement = false
+    /// The management surface owns search, download, and storage UI state.
+    /// Keep it alive for RootView's lifetime so dismissing the sheet does not
+    /// discard an in-flight download or a user's search state.
+    @State private var modelManagementViewModel: ModelManagementViewModel
+
+    init() {
+        #if os(macOS)
+        // UI tests exercise the real sheet and registry, but do not need a
+        // background URLSession or its launch-time temporary-file hygiene.
+        // Keeping that work out of the XCUITest bootstrap also prevents a
+        // large host temp directory from delaying accessibility registration.
+        let modelManagement = LaunchArguments.isUITesting
+            ? ModelManagementViewModel.preview()
+            : ModelManagementViewModel.live()
+        #else
+        let modelManagement = ModelManagementViewModel.live()
+        #endif
+        _modelManagementViewModel = State(initialValue: modelManagement)
+    }
 
     private var featureTypes: [any AppFeature.Type] {
         #if os(iOS)
@@ -35,12 +52,24 @@ struct RootView: View {
         featureTypes.map(FeatureEntry.init)
     }
 
+    private var selectedLoadIdentity: LoadSelectionIdentity {
+        LoadSelectionIdentity(
+            modelID: env.viewModel.selectedModel?.id,
+            endpointID: env.viewModel.selectedEndpoint?.id
+        )
+    }
+
     var body: some View {
         // Establish Observation tracking for the pending queue so the
         // presentation binding below re-evaluates when a tool call arrives.
         let _ = env.toolApprovalGate.pending.count
 
         themedRoot
+            .sheet(isPresented: $showModelManagement) {
+                ModelManagementSheet(modelRegistry: env.viewModel.modelRegistry)
+                    .environment(modelManagementViewModel)
+                    .accessibilityIdentifier("model-management-sheet")
+            }
             .sheet(isPresented: approvalSheetIsPresented) {
                 if let call = env.toolApprovalGate.pending.first {
                     ToolApprovalSheet(call: call)
@@ -113,6 +142,18 @@ struct RootView: View {
 
             guard env.viewModel.activeSession?.id != newSession.id else { return }
             Task { await env.viewModel.switchToSession(newSession) }
+        }
+        // ModelManagementSheet writes local choices directly to the shared
+        // ModelRegistry; cloud selection writes selectedEndpoint. Observe one
+        // combined identity rather than each property separately so the
+        // synchronous endpoint/model exclusion in ChatViewModel settles before
+        // dispatching exactly one latest-wins load intent.
+        .onChange(of: selectedLoadIdentity) { _, selection in
+            guard selection.hasSelection else { return }
+            env.viewModel.dispatchSelectedLoad()
+        }
+        .onChange(of: modelManagementViewModel.completedDownloadCount) { _, _ in
+            env.viewModel.refreshModels()
         }
         #if os(iOS)
         .onOpenURL { url in
@@ -268,7 +309,6 @@ struct RootView: View {
                     env.viewModel.selectedModel = model
                 case .endpoint(let endpoint):
                     env.viewModel.selectedEndpoint = endpoint
-                    env.viewModel.dispatchSelectedLoad()
                 }
             },
             onFixEndpoint: { _ in showModelManagement = true }
@@ -315,6 +355,24 @@ struct RootView: View {
                 )
             }
         )
+    }
+}
+
+/// A single observable load-selection value for the host. `ChatViewModel`
+/// keeps local models and cloud endpoints mutually exclusive, but selecting
+/// either can synchronously clear the other. Coalescing them here prevents
+/// those intermediate writes from issuing duplicate loads.
+private struct LoadSelectionIdentity: Equatable {
+    let modelID: UUID?
+    let endpointID: UUID?
+
+    init(modelID: UUID?, endpointID: UUID?) {
+        self.modelID = modelID
+        self.endpointID = endpointID
+    }
+
+    var hasSelection: Bool {
+        modelID != nil || endpointID != nil
     }
 }
 

@@ -27,4 +27,4 @@ jobs:
       project: Manifold.xcodeproj
       scheme: ManifoldStudio
       destination: "platform=macOS"
-      run-tests: false
+      run-tests: true

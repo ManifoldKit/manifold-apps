@@ -53,3 +53,34 @@ the same group. Verify production configuration from the generated iPhoneOS
 build settings and entitlement intermediate; exercise the store/read/buffer
 logic in-process on the simulator, and do not describe that test as
 cross-process App Group proof.
+
+## Studio real-model UI tests must stage models outside Documents and await a terminal turn
+
+A macOS XCUITest app can remain on its loading screen while the main actor is
+blocked in `NSURLDirectoryEnumerator` / `__open` against the maintainer's
+Documents model library, even though the same files are readable from the
+shell. Stage clone-on-write copies under a uniquely named `/private/tmp`
+directory, pass their validated byte sizes across the XCTest launch boundary,
+and let the companion backend perform the authoritative format check when the
+model is selected. Also do not treat the first non-empty assistant accessibility
+node as turn completion: a tool-call placeholder can appear while generation
+is still waiting for approval. The real gate must observe `Stop generation`
+appear and then disappear, and fail if the approval sheet appears before that
+terminal state. A missing `xcrun --find metallib` result is not an app-build
+preflight; Xcode's package plugins can still compile and bundle the required
+Metal libraries, so the real load is the authoritative check.
+
+## macOS can move the model-switcher toolbar chip into More overflow
+
+On a hosted arm64 runner, `chat-model-switcher-chip` can exist in the
+accessibility tree but remain non-hittable for the full wait because macOS has
+collapsed the principal toolbar item into the system `More` overflow. A bounded
+existence-and-hittability wait still handles transient launch settling; if the
+chip remains unavailable, open the real `More` toolbar button and select the
+same accessibility-identified chip from its menu hierarchy. Do not resize the
+window, tap coordinates, or add a navigation repair that bypasses the user path.
+After selection, macOS may expose nested buttons with that same identifier: the
+outer button carries the active model label while its child is labelled
+`Switch model`. Assertions about the active model must filter the identified
+query by the expected label before taking `firstMatch`; a keyed single-element
+lookup fails when both accessibility nodes are present.

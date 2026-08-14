@@ -2,6 +2,10 @@ import Foundation
 import SwiftData
 import ManifoldKit
 import ManifoldTools
+#if os(macOS)
+import ManifoldMLX
+import ManifoldLlama
+#endif
 
 /// The composition root shared by `Manifold` (iOS) and `ManifoldStudio`
 /// (macOS): owns the bootstrapped ManifoldKit stack (inference, persistence,
@@ -61,14 +65,16 @@ final class AppEnvironment {
     /// Builds the composition root.
     ///
     /// Under `--uitesting` (``LaunchArguments/isUITesting``) this swaps in a
-    /// deterministic test backend and an in-memory
-    /// SwiftData store instead of live backends + on-disk persistence —
+    /// deterministic test backend and an in-memory SwiftData store instead of
+    /// live backends + on-disk persistence —
     /// mirrors core's `Example/Advanced/ManifoldDemoApp.swift` `init()`
     /// wiring (lines 96–119). The fixed-backend
     /// `InferenceService` initializer marks the model loaded immediately (no
     /// `loadModel` step), so the composer is enabled as soon as bootstrap
     /// finishes — no `dispatchSelectedLoad()` call is needed on that path,
-    /// unlike the live-backend path below.
+    /// unlike the live-backend path below. `--studio-real-model-test` is the
+    /// explicit exception: it uses the same in-memory store for isolation but
+    /// always constructs and registers the production backends.
     ///
     /// - Parameters:
     ///   - storeName: SwiftData configuration name for the in-memory store
@@ -85,6 +91,8 @@ final class AppEnvironment {
         bundleIdentifier: String
     ) async throws -> AppEnvironment {
         let isUITesting = LaunchArguments.isUITesting
+        let runsStudioRealModelTest = LaunchArguments.runsStudioRealModelTest
+        let usesEphemeralStore = isUITesting || runsStudioRealModelTest
         let configuration = ManifoldConfiguration(appName: appName, bundleIdentifier: bundleIdentifier)
 
         // Consume the cross-process App Group slot before bootstrap work. Its
@@ -105,7 +113,9 @@ final class AppEnvironment {
         let toolApprovalGate = UIToolApprovalGate(policy: .askOncePerSession)
 
         let inferenceService: InferenceService
-        if isUITesting {
+        if isUITesting
+            && !LaunchArguments.runsStudioLocalModelTest
+            && !runsStudioRealModelTest {
             let backend: any InferenceBackend
             let backendName: String
             if LaunchArguments.runsToolApprovalFlow {
@@ -144,7 +154,7 @@ final class AppEnvironment {
         // the two branches' closures don't reliably unify to the same
         // inferred type under strict concurrency checking.
         let makeModelContainer: @MainActor () throws -> ModelContainer
-        if isUITesting {
+        if usesEphemeralStore {
             makeModelContainer = {
                 let config = ModelConfiguration(storeName, isStoredInMemoryOnly: true)
                 return try ModelContainerFactory.makeContainer(configurations: [config])
@@ -159,10 +169,32 @@ final class AppEnvironment {
             makeModelContainer: makeModelContainer
         )
 
-        if !isUITesting {
+        if !isUITesting
+            || LaunchArguments.runsStudioLocalModelTest
+            || runsStudioRealModelTest {
             OllamaBackends.register(with: inferenceService)
             CloudSaaSBackends.register(with: inferenceService)
             FoundationBackends.register(with: inferenceService)
+            #if os(macOS)
+            // Keep this factory ahead of the companion registrars. The core
+            // lifecycle asks factories in registration order, so the Studio UI
+            // suite drives its normal local-model load path with a deterministic
+            // ScriptedBackend rather than constructing MLX/llama engines or
+            // touching fixture paths. The real registrars still follow, proving
+            // the production companion wiring can coexist with that test seam.
+            if LaunchArguments.runsStudioLocalModelTest {
+                inferenceService.registerBackendFactory { modelType in
+                    switch modelType {
+                    case .mlx, .gguf:
+                        ScriptedBackend(turns: uiTestTurns)
+                    default:
+                        nil
+                    }
+                }
+            }
+            MLXBackends.register(with: inferenceService)
+            LlamaBackends.register(with: inferenceService)
+            #endif
         }
 
         let viewModel = ChatViewModel(
@@ -171,6 +203,35 @@ final class AppEnvironment {
             conversationRuntime: bootstrap.conversationRuntime
         )
         viewModel.configure(bootstrap: bootstrap)
+
+        if runsStudioRealModelTest {
+            // The hardware gate validates the two paths before launch and
+            // injects their parsed production ModelInfo values directly. Do
+            // not scan the maintainer's entire model library on the main actor
+            // here: that work is unrelated to backend switching and can delay
+            // macOS accessibility registration long enough to prevent the UI
+            // gate from starting. Normal launches still exercise discovery in
+            // the `!isUITesting` startup branch below.
+            do {
+                let discovered = try Self.studioRealModelInfos(
+                    mlxURL: LaunchArguments.studioRealMLXModelURL,
+                    ggufURL: LaunchArguments.studioRealGGUFModelURL,
+                    mlxBytes: LaunchArguments.studioRealMLXModelBytes,
+                    ggufBytes: LaunchArguments.studioRealGGUFModelBytes
+                )
+                viewModel.modelRegistry.availableModels = discovered
+            } catch {
+                viewModel.errorMessage = "Could not discover Studio real-test models: \(error.localizedDescription)"
+                Log.inference.error("Studio real-model discovery failed: \(String(describing: error), privacy: .public)")
+            }
+        } else if LaunchArguments.runsStudioLocalModelTest {
+            // The fixture lives only in the test registry; no files are created
+            // and `ScriptedBackend.loadModel` deliberately ignores these URLs.
+            // Both formats must be visibly compatible before the UI can prove
+            // that RootView dispatches a real load rather than only selecting a
+            // switcher row.
+            viewModel.modelRegistry.availableModels = Self.studioLocalModelFixtures
+        }
 
         // `ChatViewModel` does not fetch the consumer-owned EndpointStore
         // automatically. Populate it before session restoration so a saved
@@ -207,7 +268,16 @@ final class AppEnvironment {
         }
 
         if !isUITesting {
-            viewModel.refreshModels()
+            // ModelInfo discovery parses GGUF metadata and sizes MLX trees.
+            // ModelRegistry's async API performs that filesystem work away
+            // from the main actor so a real local catalogue cannot freeze the
+            // Studio launch window before RootView appears.
+            do {
+                try await viewModel.modelRegistry.refreshAsync()
+            } catch {
+                viewModel.errorMessage = "Could not create models directory: \(error.localizedDescription)"
+                Log.inference.error("Startup model discovery failed: \(String(describing: error), privacy: .public)")
+            }
             viewModel.autoSelectFirstRunModel()
 
             // Startup owns this load and awaits it. Fire-and-forget
@@ -274,5 +344,77 @@ final class AppEnvironment {
             .tokens(["Sure", ",", " happy", " to", " help", "."]),
             .tokens(["Got", " it", "."]),
         ]
+    }
+
+    /// Small, deterministic local-model catalogue used exclusively by the
+    /// Studio macOS UI target. Tiny declared sizes keep the genuine load-plan
+    /// path in its allowed state while never requiring an actual model asset.
+    private static var studioLocalModelFixtures: [ModelInfo] {
+        [
+            ModelInfo(
+                name: "Studio Fixture MLX",
+                fileName: "studio-fixture-mlx",
+                url: URL(fileURLWithPath: "/tmp/manifold-studio-fixture-mlx"),
+                fileSize: 1,
+                modelType: .mlx
+            ),
+            ModelInfo(
+                name: "Studio Fixture GGUF",
+                fileName: "studio-fixture-gguf.gguf",
+                url: URL(fileURLWithPath: "/tmp/manifold-studio-fixture-gguf.gguf"),
+                fileSize: 1,
+                modelType: .gguf
+            ),
+        ]
+    }
+
+    /// Creates catalogue records for the two shell-validated hardware-gate
+    /// assets without parsing either model before RootView exists. The real
+    /// companion backends remain responsible for their authoritative format
+    /// and metadata checks when the user selects each row.
+    private static func studioRealModelInfos(
+        mlxURL: URL,
+        ggufURL: URL,
+        mlxBytes: UInt64?,
+        ggufBytes: UInt64?
+    ) throws -> [ModelInfo] {
+        guard let mlxBytes, let ggufBytes else {
+            throw StudioRealModelDiscoveryError.missingValidatedSizes
+        }
+        let mlx = ModelInfo(
+            name: Self.studioRealDisplayName(for: mlxURL, stripsExtension: false),
+            fileName: mlxURL.lastPathComponent,
+            url: mlxURL,
+            fileSize: mlxBytes,
+            modelType: .mlx
+        )
+        let gguf = ModelInfo(
+            name: Self.studioRealDisplayName(for: ggufURL, stripsExtension: true),
+            fileName: ggufURL.lastPathComponent,
+            url: ggufURL,
+            fileSize: ggufBytes,
+            modelType: .gguf
+        )
+        return [mlx, gguf]
+    }
+
+    private static func studioRealDisplayName(for url: URL, stripsExtension: Bool) -> String {
+        let rawName = stripsExtension
+            ? (url.lastPathComponent as NSString).deletingPathExtension
+            : url.lastPathComponent
+        return rawName
+            .replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: "_", with: " ")
+    }
+}
+
+private enum StudioRealModelDiscoveryError: LocalizedError {
+    case missingValidatedSizes
+
+    var errorDescription: String? {
+        switch self {
+        case .missingValidatedSizes:
+            "The Studio real-model gate did not provide validated model byte sizes."
+        }
     }
 }

@@ -1,4 +1,4 @@
-.PHONY: generate build test clean
+.PHONY: generate build test studio-real-models clean
 
 # Overridable so a host with no "iPhone 16" simulator installed (e.g. an
 # iPhone-17-generation-only Mac) can still `make build`/`make test` locally:
@@ -19,18 +19,31 @@ build: generate
 		-project Manifold.xcodeproj \
 		-scheme Manifold \
 		-destination '$(IOS_DESTINATION)' \
+		-skipPackagePluginValidation \
 		CODE_SIGNING_ALLOWED=NO
 	xcodebuild build \
 		-project Manifold.xcodeproj \
 		-scheme ManifoldStudio \
 		-destination 'platform=macOS' \
+		-skipPackagePluginValidation \
 		CODE_SIGNING_ALLOWED=NO
 
 test: generate
 	xcodebuild test \
 		-project Manifold.xcodeproj \
 		-scheme Manifold \
-		-destination '$(IOS_DESTINATION)'
+		-destination '$(IOS_DESTINATION)' \
+		-skipPackagePluginValidation
+	xcodebuild test \
+		-project Manifold.xcodeproj \
+		-scheme ManifoldStudio \
+		-destination 'platform=macOS' \
+		-skipPackagePluginValidation
+
+# Opt-in physical-hardware regression gate. The script validates the machine
+# and installed model assets before invoking the complete Studio UI-test target.
+studio-real-models:
+	bash ./scripts/test-studio-real-models.sh
 
 clean:
 	rm -rf Manifold.xcodeproj DerivedData .build
