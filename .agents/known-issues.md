@@ -79,3 +79,8 @@ existence-and-hittability wait still handles transient launch settling; if the
 chip remains unavailable, open the real `More` toolbar button and select the
 same accessibility-identified chip from its menu hierarchy. Do not resize the
 window, tap coordinates, or add a navigation repair that bypasses the user path.
+After selection, macOS may expose nested buttons with that same identifier: the
+outer button carries the active model label while its child is labelled
+`Switch model`. Assertions about the active model must filter the identified
+query by the expected label before taking `firstMatch`; a keyed single-element
+lookup fails when both accessibility nodes are present.

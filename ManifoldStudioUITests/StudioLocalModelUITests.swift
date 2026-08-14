@@ -104,8 +104,13 @@ final class StudioLocalModelUITests: XCTestCase {
 
         // A completed non-empty turn proves dispatchSelectedLoad installed the
         // selected backend; seeing the row or chip alone only proves selection.
-        let chip = app.descendants(matching: .any)["chat-model-switcher-chip"]
-        XCTAssertTrue(chip.label.localizedCaseInsensitiveContains(model), "The switcher chip should identify active model \(model)")
+        let activeChip = app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier == 'chat-model-switcher-chip' AND label CONTAINS[c] %@", model)
+        ).firstMatch
+        XCTAssertTrue(
+            activeChip.waitForExistence(timeout: 5),
+            "The switcher chip should identify active model \(model)"
+        )
 
         let assistantCountBefore = assistantBubbles().count
         guard let input = findMessageInput(app: app) else {
