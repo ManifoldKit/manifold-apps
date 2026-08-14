@@ -59,6 +59,11 @@ actor PendingPayloadBuffer {
         for await readiness in readinessUpdates {
             guard !Task.isCancelled else { return }
             guard readiness == .ready else { continue }
+            // `AppIntentsFeature.install(into:)` can replace an older
+            // delivery task when a newer single-slot payload arrives. Check
+            // again immediately before consuming so a cancelled predecessor
+            // cannot drain the replacement payload.
+            guard !Task.isCancelled else { return }
             guard let payload = drain() else { return }
             deliveryState = .delivering
             await deliver(payload)

@@ -1,6 +1,11 @@
 import AppIntents
 import Foundation
 import ManifoldInference
+#if canImport(UIKit)
+import UIKit
+#endif
+
+#if os(iOS)
 
 /// App Intent that routes a prompt from Spotlight, Siri, or Shortcuts into a
 /// fresh chat session inside the host app.
@@ -14,23 +19,21 @@ import ManifoldInference
 /// 1. The intent writes a JSON-encoded ``InboundPayloadEnvelope`` into the
 ///    shared App Group `UserDefaults` (``ManifoldAppGroup/identifier``, key
 ///    ``ManifoldAppGroup/inboundKey``).
-/// 2. `openAppWhenRun` foregrounds (or cold-launches) the host app — no
-///    custom URL scheme is used to trigger this, unlike core's demo. Core's
-///    `manifolddemo://ingest` scheme exists purely to reach its
-///    `.onOpenURL` handler synchronously; this app has no URL scheme
-///    registered (that's a `project.yml` change, outside this feature's
-///    ownership — see the PR description) and no `.onOpenURL` handler on
-///    `Mobile/ManifoldApp.swift` / `Studio/ManifoldStudioApp.swift` (also
-///    outside this feature's ownership). `openAppWhenRun` alone is enough
-///    to guarantee the cold-launch case: `AppEnvironment.bootstrap(...)`
-///    stages the envelope during startup, then
+/// 2. It opens `manifold://ingest`. `RootView.onOpenURL` validates that
+///    route and drains the envelope even when the app's scene is already
+///    active. The generated iOS Info.plist registers the `manifold` scheme.
+/// 3. On cold launch, `AppEnvironment.bootstrap(...)` stages the envelope;
 ///    `AppIntentsFeature.install(into:)` drains it only after the real
 ///    InferenceService publishes model readiness.
-/// 3. A **warm** relaunch (app already foregrounded when the intent fires
-///    again) is NOT caught today. Catching that case needs a
-///    scenePhase/`.onOpenURL` hook in the app-entry files above; flagged as
-///    a known gap rather than silently dropped.
 public struct AskManifoldAppIntent: AppIntent {
+
+    private enum Error: LocalizedError {
+        case failedToOpenInboundRoute
+
+        var errorDescription: String? {
+            "Manifold could not open its inbound handoff route."
+        }
+    }
 
     public static let title: LocalizedStringResource = "Ask Manifold"
 
@@ -52,6 +55,7 @@ public struct AskManifoldAppIntent: AppIntent {
         self.prompt = prompt
     }
 
+    @MainActor
     public func perform() async throws -> some IntentResult {
         // The envelope carries both the prompt and an attachments array so
         // a future richer entry point (Share / Action Extension) can
@@ -70,6 +74,16 @@ public struct AskManifoldAppIntent: AppIntent {
             throw error
         }
 
+        #if canImport(UIKit)
+        let didOpen = await UIApplication.shared.open(InboundAppIntentRoute.url, options: [:])
+        if !didOpen {
+            Log.ui.error("AskManifoldAppIntent: failed to open inbound handoff URL")
+            throw Error.failedToOpenInboundRoute
+        }
+        #endif
+
         return .result()
     }
 }
+
+#endif

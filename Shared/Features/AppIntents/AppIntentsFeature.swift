@@ -25,9 +25,8 @@ enum AppIntentsFeature: AppFeature {
     ///
     /// Startup stores the App Group envelope here before bootstrap, and
     /// `install(into:)` drains it only after the service publishes `.ready`.
-    /// A future `.onOpenURL` / scenePhase hook can store into this same actor
-    /// to cover the warm-relaunch case documented on
-    /// `AskManifoldAppIntent`.
+    /// The app's `manifold://ingest` URL handler re-checks the App Group slot
+    /// for every warm invocation; foreground activation is only a fallback.
     static let pendingPayloadBuffer = PendingPayloadBuffer()
     private static var deliveryTask: Task<Void, Never>?
     private(set) static var inboundHandoffStatus = "No inbound AppIntent payload staged."
@@ -51,29 +50,59 @@ enum AppIntentsFeature: AppFeature {
     /// published; malformed data is cleared and reported instead of replayed.
     static func stageInboundPayloadDuringStartup() async {
         InboundAppIntentEnvelopeStore.seedUITestEnvelopeIfRequested()
-        switch InboundAppIntentEnvelopeStore.take() {
+        await stageInboundPayload(InboundAppIntentEnvelopeStore.take())
+    }
+
+    static func isInboundAppIntentURL(_ url: URL) -> Bool {
+        InboundAppIntentRoute.isInboundURL(url)
+    }
+
+    /// Drains the App Group slot after an inbound URL event or an activation
+    /// fallback. A warm `openAppWhenRun` invocation does not repeat bootstrap,
+    /// so this is the production handoff that gets its envelope into the
+    /// already-installed readiness delivery loop.
+    static func stageAndDeliverInboundPayloadAfterActivation(into env: AppEnvironment) async {
+        guard await stageInboundPayload(InboundAppIntentEnvelopeStore.take()) else { return }
+        install(into: env)
+    }
+
+    /// Kept separate from the store read so the state transition is directly
+    /// testable with a synthetic App Group result. The URL handoff above
+    /// always supplies the real store result.
+    @discardableResult
+    static func stageInboundPayload(_ result: InboundAppIntentEnvelopeStore.TakeResult) async -> Bool {
+        switch result {
         case .empty:
             inboundHandoffStatus = "No inbound AppIntent payload staged."
+            return false
         case .payload(let payload):
             await pendingPayloadBuffer.store(payload)
             inboundHandoffStatus = "Inbound AppIntent payload buffered until model readiness."
+            return true
         case .malformed(let error):
             inboundHandoffStatus = "Malformed inbound AppIntent payload discarded."
             Log.ui.warning("AppIntentsFeature: malformed inbound envelope discarded: \(String(describing: error), privacy: .public)")
+            return false
         case .appGroupUnavailable:
             inboundHandoffStatus = "App Group unavailable; inbound AppIntent handoff disabled."
             Log.ui.error("AppIntentsFeature: App Group '\(ManifoldAppGroup.identifier, privacy: .public)' unavailable")
+            return false
         }
     }
 
     static func install(into env: AppEnvironment) {
-        guard deliveryTask == nil else { return }
+        deliveryTask?.cancel()
         let readinessUpdates = env.bootstrap.inferenceService.modelLoadReadinessUpdates()
         deliveryTask = Task { @MainActor in
-            defer { deliveryTask = nil }
+            defer {
+                if Task.isCancelled == false {
+                    deliveryTask = nil
+                }
+            }
             await pendingPayloadBuffer.deliverWhenModelReady(
                 readinessUpdates: readinessUpdates
             ) { payload in
+                guard !Task.isCancelled else { return }
                 await env.viewModel.ingest(payload)
                 inboundHandoffStatus = "Inbound AppIntent payload delivered after model readiness."
             }

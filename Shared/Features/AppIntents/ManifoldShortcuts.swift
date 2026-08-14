@@ -1,6 +1,8 @@
 import AppIntents
 import ManifoldAppIntents
 
+#if os(iOS)
+
 /// Surfaces ``AskManifoldAppIntent`` (and, once `ManifoldAppIntents` is
 /// linked, the library-provided `AskManifoldIntent`) to Spotlight / Siri so
 /// users can invoke them by voice or from the keyboard without opening the
@@ -9,9 +11,9 @@ import ManifoldAppIntents
 /// Ported from ManifoldKit's own
 /// `Example/Advanced/Intents/ManifoldDemoShortcuts.swift` — renamed to drop
 /// "Demo" branding. Phrases use `.applicationName` rather than a literal
-/// app name so the same shortcut text reads correctly whether the host
-/// bundle is `Manifold` (iOS) or `Manifold Studio` (macOS) — this file is
-/// compiled into both targets.
+/// app name so the shortcut text follows the iOS host bundle. This file is
+/// deliberately compiled into the iOS target only: the foreground shortcut
+/// hands work off through the iOS App Group entitlement.
 ///
 /// ## AppShortcutsProvider must live in the host bundle
 ///
@@ -23,7 +25,7 @@ import ManifoldAppIntents
 /// exactly where `Shared/` sources land.
 public struct ManifoldShortcuts: AppShortcutsProvider {
 
-    @available(iOS 18, macOS 15, *)
+    @available(iOS 18, *)
     public static var appShortcuts: [AppShortcut] {
         // `prompt` is a plain `String`, which Siri's phrase-binding syntax
         // (`\(\.$prompt)`) does not allow — only `AppEntity`/`AppEnum`
@@ -53,3 +55,5 @@ public struct ManifoldShortcuts: AppShortcutsProvider {
         )
     }
 }
+
+#endif

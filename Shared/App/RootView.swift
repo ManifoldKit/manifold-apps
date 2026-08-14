@@ -110,6 +110,12 @@ struct RootView: View {
             Task { await env.viewModel.switchToSession(newSession) }
         }
         #if os(iOS)
+        .onOpenURL { url in
+            guard AppIntentsFeature.isInboundAppIntentURL(url) else { return }
+            Task {
+                await AppIntentsFeature.stageAndDeliverInboundPayloadAfterActivation(into: env)
+            }
+        }
         .onChange(of: horizontalSizeClass) { _, newSizeClass in
             guard newSizeClass != .compact else { return }
             columnVisibility = .automatic

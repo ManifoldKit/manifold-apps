@@ -20,31 +20,66 @@ import AppIntents
 @available(iOS 18, macOS 15, *)
 actor RuntimeHandler: AskManifoldHandler {
 
-    private let inferenceService: InferenceService
+    private enum Error: LocalizedError {
+        case modelNoLongerReady
+
+        var errorDescription: String? {
+            switch self {
+            case .modelNoLongerReady:
+                "Manifold's model became unavailable before the request could start."
+            }
+        }
+    }
+
+    private let waitForReadiness: @Sendable () async throws -> Void
+    private let generateReply: @Sendable (String) async throws -> String
 
     init(inferenceService: InferenceService) {
-        self.inferenceService = inferenceService
+        self.waitForReadiness = {
+            let updates = await MainActor.run {
+                inferenceService.modelLoadReadinessUpdates()
+            }
+            try await AppIntentModelReadinessGate.waitUntilReady(updates)
+        }
+        self.generateReply = { prompt in
+            // A model can unload after the readiness stream emitted `.ready`.
+            // Re-check in the same MainActor hop as `generate` so the handler
+            // never starts inference against an unloaded service.
+            let stream = try await MainActor.run {
+                guard inferenceService.modelLoadReadinessState == .ready else {
+                    throw Error.modelNoLongerReady
+                }
+                return try inferenceService.generate(messages: [(role: "user", content: prompt)])
+            }
+            var reply = ""
+            for try await event in stream.events {
+                if case .token(let chunk) = event {
+                    reply += chunk
+                }
+            }
+            return reply
+        }
+    }
+
+    /// Dependency-injected seam for readiness sequencing coverage. The app
+    /// initializer above remains the only production construction path.
+    init(
+        waitForReadiness: @escaping @Sendable () async throws -> Void,
+        generateReply: @escaping @Sendable (String) async throws -> String
+    ) {
+        self.waitForReadiness = waitForReadiness
+        self.generateReply = generateReply
     }
 
     func ask(_ prompt: String) async throws -> String {
-        // `InferenceService` is `@MainActor`-isolated; `generate(messages:)`
-        // returns a `GenerationStream` whose `events` is a Sendable
-        // AsyncSequence. Hop to the main actor to call `generate`, then
-        // consume the stream off-actor.
-        let service = inferenceService
-        let stream = try await MainActor.run {
-            try service.generate(messages: [(role: "user", content: prompt)])
-        }
-        var reply = ""
-        for try await event in stream.events {
-            if case .token(let chunk) = event {
-                reply += chunk
-            }
-        }
-        return reply
+        try await AppIntentModelReadinessGate.executeWhenReady(
+            waitForReadiness: waitForReadiness,
+            work: { try await self.generateReply(prompt) }
+        )
     }
 
     func displayName() async -> String {
         "Manifold"
     }
+
 }

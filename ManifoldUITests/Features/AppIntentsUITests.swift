@@ -122,6 +122,85 @@ final class AppIntentsUITests: XCTestCase {
         XCTAssertTrue(recorder.payloads.isEmpty, "A readiness stream ending early must not silently consume the payload")
     }
 
+    /// Mirrors the warm scene contract without needing a system AppIntent
+    /// invocation in the UI-test runner: a valid `manifold://ingest` event
+    /// stages into the same single-slot buffer, then waits for `.ready` before
+    /// delivery. Sabotage rationale: changing the route predicate to accept a
+    /// different host or removing the readiness buffer makes one of the route
+    /// / pre-ready assertions below fail, rather than merely exercising a
+    /// cold-launch-only path.
+    @MainActor
+    func test_warmInboundURL_stagesThenDeliversOnlyAfterReady() async {
+        XCTAssertTrue(InboundAppIntentRoute.isInboundURL(URL(string: "manifold://ingest")!))
+        XCTAssertFalse(InboundAppIntentRoute.isInboundURL(URL(string: "manifold://other")!))
+        XCTAssertFalse(InboundAppIntentRoute.isInboundURL(URL(string: "other://ingest")!))
+        XCTAssertFalse(InboundAppIntentRoute.isInboundURL(URL(string: "manifold://ingest/unexpected")!))
+
+        let buffer = PendingPayloadBuffer()
+        let recorder = PayloadRecorder()
+        await buffer.store(InboundPayload(prompt: "warm scene payload", source: .appIntent))
+        let (updates, continuation) = AsyncStream<ModelLoadReadinessState>.makeStream()
+        let delivery = Task {
+            await buffer.deliverWhenModelReady(readinessUpdates: updates) { inbound in
+                recorder.record(inbound)
+            }
+        }
+
+        continuation.yield(.loading(progress: 0.75))
+        await waitForDeliveryState(.waitingForModel, in: buffer)
+        XCTAssertTrue(recorder.payloads.isEmpty, "A warm URL handoff must not ingest before the model is ready")
+
+        continuation.yield(.ready)
+        continuation.finish()
+        await delivery.value
+        XCTAssertEqual(recorder.payloads.map(\.prompt), ["warm scene payload"])
+    }
+
+    func test_backgroundReadinessGate_waitsBeforeGenerating() async throws {
+        let probe = ReadinessGateProbe()
+        let task = Task {
+            try await AppIntentModelReadinessGate.executeWhenReady(
+                waitForReadiness: { await probe.waitForReady() },
+                work: {
+                    await probe.recordGeneration()
+                    return "reply"
+                }
+            )
+        }
+
+        await probe.waitUntilWaiting()
+        let generatedBeforeReady = await probe.didGenerate
+        XCTAssertFalse(generatedBeforeReady, "Inference must not start before the background readiness gate opens")
+
+        await probe.markReady()
+        let reply = try await task.value
+        let generatedAfterReady = await probe.didGenerate
+        XCTAssertEqual(reply, "reply")
+        XCTAssertTrue(generatedAfterReady)
+    }
+
+    func test_backgroundReadinessGate_reportsEndedStreamWithoutGenerating() async {
+        let updates = AsyncStream<ModelLoadReadinessState> { $0.finish() }
+        let probe = ReadinessGateProbe()
+
+        do {
+            _ = try await AppIntentModelReadinessGate.executeWhenReady(
+                waitForReadiness: { try await AppIntentModelReadinessGate.waitUntilReady(updates) },
+                work: {
+                    await probe.recordGeneration()
+                    return "unreachable"
+                }
+            )
+            XCTFail("A readiness stream that ends before .ready must report a failure")
+        } catch let error as AppIntentModelReadinessGate.Error {
+            XCTAssertEqual(error, .streamEndedBeforeModelReady)
+        } catch {
+            XCTFail("Expected the explicit readiness failure, got \(error)")
+        }
+        let generatedAfterFailure = await probe.didGenerate
+        XCTAssertFalse(generatedAfterFailure, "The red readiness path must not invoke inference")
+    }
+
     // MARK: - UI-level: sidebar renders AppIntentsFeature's real content
 
     /// Fails if `AppIntentsFeature.makeView(env:)` reverts to
@@ -291,4 +370,37 @@ private final class PayloadRecorder {
     func record(_ payload: InboundPayload) {
         payloads.append(payload)
     }
+}
+
+private actor ReadinessGateProbe {
+    private var isWaiting = false
+    private var isReady = false
+    private var didStartGeneration = false
+    private var waitStartContinuation: CheckedContinuation<Void, Never>?
+    private var readyContinuation: CheckedContinuation<Void, Never>?
+
+    func waitForReady() async {
+        isWaiting = true
+        waitStartContinuation?.resume()
+        waitStartContinuation = nil
+        guard !isReady else { return }
+        await withCheckedContinuation { readyContinuation = $0 }
+    }
+
+    func waitUntilWaiting() async {
+        guard !isWaiting else { return }
+        await withCheckedContinuation { waitStartContinuation = $0 }
+    }
+
+    func markReady() {
+        isReady = true
+        readyContinuation?.resume()
+        readyContinuation = nil
+    }
+
+    func recordGeneration() {
+        didStartGeneration = true
+    }
+
+    var didGenerate: Bool { didStartGeneration }
 }
