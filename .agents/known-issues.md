@@ -53,3 +53,19 @@ the same group. Verify production configuration from the generated iPhoneOS
 build settings and entitlement intermediate; exercise the store/read/buffer
 logic in-process on the simulator, and do not describe that test as
 cross-process App Group proof.
+
+## Studio real-model UI tests must stage models outside Documents and await a terminal turn
+
+A macOS XCUITest app can remain on its loading screen while the main actor is
+blocked in `NSURLDirectoryEnumerator` / `__open` against the maintainer's
+Documents model library, even though the same files are readable from the
+shell. Stage clone-on-write copies under a uniquely named `/private/tmp`
+directory, pass their validated byte sizes across the XCTest launch boundary,
+and let the companion backend perform the authoritative format check when the
+model is selected. Also do not treat the first non-empty assistant accessibility
+node as turn completion: a tool-call placeholder can appear while generation
+is still waiting for approval. The real gate must observe `Stop generation`
+appear and then disappear, and fail if the approval sheet appears before that
+terminal state. A missing `xcrun --find metallib` result is not an app-build
+preflight; Xcode's package plugins can still compile and bundle the required
+Metal libraries, so the real load is the authoritative check.

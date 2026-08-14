@@ -17,6 +17,46 @@ enum LaunchArguments {
         isUITesting && CommandLine.arguments.contains("--studio-local-model-test")
     }
 
+    /// Enables the opt-in Studio hardware gate. Unlike
+    /// ``runsStudioLocalModelTest``, this is deliberately a live inference
+    /// path: it discovers two installed model assets and lets the normal
+    /// RootView selection dispatch load MLX and llama.cpp backends. It may be
+    /// combined with `--uitesting` solely to get the ephemeral SwiftData store;
+    /// it must never select the scripted backend or fixture catalogue.
+    static var runsStudioRealModelTest: Bool {
+        CommandLine.arguments.contains("--studio-real-model-test")
+    }
+
+    /// The installed MLX directory exercised by the Studio hardware gate.
+    /// The shell gate passes this through explicitly, while the default keeps
+    /// the one-command local workflow useful on the maintainer's machine.
+    static var studioRealMLXModelURL: URL {
+        modelURL(
+            environmentKey: "MANIFOLD_STUDIO_REAL_MLX_MODEL_PATH",
+            defaultPath: "~/Documents/Models/mlx/Qwen3.5-2B-4bit"
+        )
+    }
+
+    /// The installed GGUF file exercised by the Studio hardware gate.
+    static var studioRealGGUFModelURL: URL {
+        modelURL(
+            environmentKey: "MANIFOLD_STUDIO_REAL_GGUF_MODEL_PATH",
+            defaultPath: "~/Documents/Models/gguf/Qwen3.5-2B/Qwen_Qwen3.5-2B-Q4_K_M.gguf"
+        )
+    }
+
+    /// Shell-validated weight bytes for the hardware-gate MLX directory.
+    /// Passing this across the XCTest process boundary avoids enumerating a
+    /// TCC-protected Documents directory during app bootstrap.
+    static var studioRealMLXModelBytes: UInt64? {
+        modelBytes(environmentKey: "MANIFOLD_STUDIO_REAL_MLX_MODEL_BYTES")
+    }
+
+    /// Shell-validated byte size for the hardware-gate GGUF file.
+    static var studioRealGGUFModelBytes: UInt64? {
+        modelBytes(environmentKey: "MANIFOLD_STUDIO_REAL_GGUF_MODEL_BYTES")
+    }
+
     /// Seeds ChatView's real API-key recovery banner for the endpoint-store
     /// UI regression. Kept separate from `--uitesting` so the smoke suite's
     /// normal launch state is unchanged.
@@ -81,5 +121,19 @@ enum LaunchArguments {
             return nil
         }
         return args[index + 1]
+    }
+
+    private static func modelURL(environmentKey: String, defaultPath: String) -> URL {
+        let path = ProcessInfo.processInfo.environment[environmentKey] ?? defaultPath
+        return URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
+    }
+
+    private static func modelBytes(environmentKey: String) -> UInt64? {
+        guard let rawValue = ProcessInfo.processInfo.environment[environmentKey],
+              let bytes = UInt64(rawValue),
+              bytes > 0 else {
+            return nil
+        }
+        return bytes
     }
 }

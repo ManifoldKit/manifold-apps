@@ -23,7 +23,22 @@ struct RootView: View {
     /// The management surface owns search, download, and storage UI state.
     /// Keep it alive for RootView's lifetime so dismissing the sheet does not
     /// discard an in-flight download or a user's search state.
-    @State private var modelManagementViewModel = ModelManagementViewModel.live()
+    @State private var modelManagementViewModel: ModelManagementViewModel
+
+    init() {
+        #if os(macOS)
+        // UI tests exercise the real sheet and registry, but do not need a
+        // background URLSession or its launch-time temporary-file hygiene.
+        // Keeping that work out of the XCUITest bootstrap also prevents a
+        // large host temp directory from delaying accessibility registration.
+        let modelManagement = LaunchArguments.isUITesting
+            ? ModelManagementViewModel.preview()
+            : ModelManagementViewModel.live()
+        #else
+        let modelManagement = ModelManagementViewModel.live()
+        #endif
+        _modelManagementViewModel = State(initialValue: modelManagement)
+    }
 
     private var featureTypes: [any AppFeature.Type] {
         #if os(iOS)

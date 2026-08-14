@@ -1,9 +1,9 @@
 import XCTest
 
-/// Mac-only coverage for the companion-backed local-model wiring. The app
-/// swaps MLX/GGUF loads for `ScriptedBackend` only under the explicit launch
-/// argument, letting this target exercise RootView's real model-switcher and
-/// load dispatch without downloading or allocating a real model.
+/// Mac-only coverage for companion-backed local-model wiring. The app swaps
+/// MLX/GGUF loads for ScriptedBackend only under this explicit launch argument,
+/// so the test exercises the production model-switcher and load dispatch
+/// without downloading or allocating a real model.
 final class StudioLocalModelUITests: XCTestCase {
     private let mlxFixtureName = "Studio Fixture MLX"
     private let ggufFixtureName = "Studio Fixture GGUF"
@@ -25,10 +25,8 @@ final class StudioLocalModelUITests: XCTestCase {
         )
         button.tap()
 
-        XCTAssertTrue(
-            app.descendants(matching: .any)["model-management-sheet"].waitForExistence(timeout: 5),
-            "The host should present the real ModelManagementSheet"
-        )
+        // The sheet root is not consistently surfaced in macOS accessibility;
+        // the tab picker is the real ModelManagementSheet content and is stable.
         XCTAssertTrue(
             app.descendants(matching: .any)["model-management-tab-picker"].waitForExistence(timeout: 5),
             "The real ModelManagementSheet tab picker should be visible on macOS"
@@ -48,13 +46,18 @@ final class StudioLocalModelUITests: XCTestCase {
         XCTAssertTrue(ggufRow.waitForExistence(timeout: 5), "The GGUF fixture should be available")
 
         let unavailableWarning = switcher.descendants(matching: .any).matching(
-            NSPredicate(format: "label CONTAINS[c] 'require the' AND (label CONTAINS[c] 'MLX' OR label CONTAINS[c] 'GGUF')")
+            NSPredicate(format: "label CONTAINS[c] 'require' AND label CONTAINS[c] 'backend'")
         ).firstMatch
         XCTAssertFalse(unavailableWarning.exists, "Both fixtures should have registered local backends, not a missing-backend warning")
 
-        loadAndAssertDeviceInfo(row: mlxRow, model: mlxFixtureName, backend: "mlx")
+        loadAndAssertGeneration(row: mlxRow, model: mlxFixtureName, backend: "mlx", prompt: "fixture MLX turn")
         openModelSwitcher()
-        loadAndAssertDeviceInfo(row: descendant(in: app.descendants(matching: .any)["model-switcher-list"], containing: ggufFixtureName), model: ggufFixtureName, backend: "llama")
+        loadAndAssertGeneration(
+            row: descendant(in: app.descendants(matching: .any)["model-switcher-list"], containing: ggufFixtureName),
+            model: ggufFixtureName,
+            backend: "llama",
+            prompt: "fixture GGUF turn"
+        )
     }
 
     @MainActor
@@ -68,42 +71,79 @@ final class StudioLocalModelUITests: XCTestCase {
     }
 
     @MainActor
-    private func loadAndAssertDeviceInfo(row: XCUIElement, model: String, backend: String) {
+    private func loadAndAssertGeneration(row: XCUIElement, model: String, backend: String, prompt: String) {
         XCTAssertTrue(row.waitForExistence(timeout: 5) && row.isHittable, "Fixture row should be tappable: \(model)")
         row.tap()
 
-        // ModelSwitcherView is a macOS popover, and a row selection does not
-        // dismiss it. Close that presentation before opening the production
-        // Device Info popover behind it.
+        // The macOS switcher is a popover that remains open after selection.
         app.typeKey(.escape, modifierFlags: [])
 
-        let deviceInfoButton = descendant(in: app, containing: "Device Info")
         XCTAssertTrue(
-            deviceInfoButton.waitForExistence(timeout: 10) && deviceInfoButton.isHittable,
-            "Device Info should be reachable after selecting \(model)"
+            waitForChatInputReady(app: app, timeout: 10),
+            "The composer should become ready after loading \(model)"
         )
-        deviceInfoButton.tap()
 
-        // macOS commonly combines the popover's LabeledContent nodes. Query
-        // all descendants by their exposed labels so this asserts the shipped
-        // Device Info surface, not only the switcher selection state.
+        // A completed non-empty turn proves dispatchSelectedLoad installed the
+        // selected backend; seeing the row or chip alone only proves selection.
+        let chip = app.descendants(matching: .any)["chat-model-switcher-chip"]
+        XCTAssertTrue(chip.label.localizedCaseInsensitiveContains(model), "The switcher chip should identify active model \(model)")
+
+        let assistantCountBefore = assistantBubbles().count
+        guard let input = findMessageInput(app: app) else {
+            XCTFail("Message input should be available after loading \(model)")
+            return
+        }
+        input.tap()
+        input.typeText(prompt)
+
+        let sendButton = app.buttons["Send message"]
         XCTAssertTrue(
-            descendant(in: app, containing: "Model Loaded").waitForExistence(timeout: 10),
-            "Device Info should report Model Loaded"
+            waitForEnabled(sendButton, timeout: 15),
+            "Send should be enabled after loading \(model)"
         )
-        XCTAssertTrue(
-            descendant(in: app, containing: "Yes").waitForExistence(timeout: 10),
-            "Device Info should report Model Loaded: Yes after dispatching \(model)"
+        sendButton.tap()
+
+        XCTAssertTrue(waitForAssistantCount(toExceed: assistantCountBefore, timeout: 30), "A completed \(backend) turn should add an assistant bubble")
+        guard let newestAssistant = assistantBubbles().last else {
+            XCTFail("Assistant bubble count increased but no newest bubble could be queried")
+            return
+        }
+        let label = newestAssistant.label.trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertEqual(
+            label,
+            "Assistant said: Hello from the scripted UI-test backend.",
+            "Each selection should install a fresh backend instance; a stale prior backend would advance to a different scripted turn"
         )
-        XCTAssertTrue(
-            descendant(in: app, containing: model).waitForExistence(timeout: 10),
-            "Device Info should expose the active model after dispatching its load"
+    }
+
+    @MainActor
+    private func assistantBubbles() -> [XCUIElement] {
+        app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH[c] 'Assistant said:'"))
+            .allElementsBoundByIndex
+    }
+
+    @MainActor
+    private func waitForAssistantCount(toExceed count: Int, timeout: TimeInterval) -> Bool {
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate { [weak self] _, _ in
+                (self?.assistantBubbles().count ?? 0) > count
+            },
+            object: nil
         )
-        XCTAssertTrue(
-            descendant(in: app, containing: backend).waitForExistence(timeout: 10),
-            "Device Info should expose the active backend after dispatching its load"
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+    }
+
+    @MainActor
+    private func waitForEnabled(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate { object, _ in
+                guard let element = object as? XCUIElement else { return false }
+                return element.exists && element.isEnabled
+            },
+            object: element
         )
-        app.typeKey(.escape, modifierFlags: [])
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
     }
 
     @MainActor
