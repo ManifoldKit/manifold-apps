@@ -1,15 +1,25 @@
 import SwiftUI
 
-/// Stub — tool-calling registry + approval UI (manifold-apps W2 P1). A
-/// later worker replaces only `install(into:)`/`makeView(env:)` below.
+/// Installs the app's reference toolset and exposes a browser for the live
+/// registry plus its approval policy.
 enum ToolsFeature: AppFeature {
     static let id = "tools"
     static let title = "Tools"
     static let systemImage = "wrench.and.screwdriver"
 
-    static func install(into env: AppEnvironment) {}
+    static func install(into env: AppEnvironment) {
+        ManifoldToolset.register(on: env.toolRegistry)
+        updateAdvertisement(in: env)
+    }
+
+    static func updateAdvertisement(in env: AppEnvironment) {
+        ManifoldToolset.updateAdvertisement(
+            on: env.toolRegistry,
+            backendName: env.viewModel.activeBackendName
+        )
+    }
 
     static func makeView(env: AppEnvironment) -> AnyView {
-        AnyView(NotYetPortedView(title: title))
+        AnyView(ToolsBrowserView(env: env))
     }
 }

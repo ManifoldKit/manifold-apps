@@ -8,8 +8,13 @@ import ManifoldUIModelManagement
 /// from the SwiftUI environment; owns no bootstrap state of its own.
 struct RootView: View {
     @Environment(AppEnvironment.self) private var env
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
 
     @State private var selectedFeatureID: String?
+    @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
+    @State private var preferredCompactColumn: NavigationSplitViewColumn = .detail
     @State private var didInstallFeatures = false
 
     /// Satisfies `ChatView`'s required binding. No `ModelManagementSheet` is
@@ -31,7 +36,34 @@ struct RootView: View {
     }
 
     var body: some View {
+        // Establish Observation tracking for the pending queue so the
+        // presentation binding below re-evaluates when a tool call arrives.
+        let _ = env.toolApprovalGate.pending.count
+
         themedRoot
+            .sheet(isPresented: approvalSheetIsPresented) {
+                if let call = env.toolApprovalGate.pending.first {
+                    ToolApprovalSheet(call: call)
+                        .environment(env.viewModel)
+                } else {
+                    Color.clear.frame(width: 1, height: 1)
+                }
+            }
+            .overlay {
+                // SwiftUI sheet timing is nondeterministic under XCUITest.
+                // The deterministic tool-flow launch mounts the same real
+                // approval view inline; its buttons still resolve the live
+                // UIToolApprovalGate continuation used by the turn loop.
+                if LaunchArguments.runsToolApprovalFlow,
+                   let call = env.toolApprovalGate.pending.first {
+                    ToolApprovalSheet(call: call)
+                        .environment(env.viewModel)
+                        .background(.regularMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .shadow(radius: 12)
+                        .padding()
+                }
+            }
     }
 
     @ViewBuilder
@@ -46,7 +78,10 @@ struct RootView: View {
     }
 
     private var rootContent: some View {
-        NavigationSplitView {
+        NavigationSplitView(
+            columnVisibility: $columnVisibility,
+            preferredCompactColumn: $preferredCompactColumn
+        ) {
             sidebar
         } detail: {
             detail
@@ -60,9 +95,28 @@ struct RootView: View {
                 feature.install(into: env)
             }
         }
-        .onChange(of: selectedFeatureID) { oldValue, _ in
+        .onChange(of: selectedFeatureID) { oldValue, newValue in
+            if newValue != nil { showCompactDetail() }
+
             guard oldValue == CloudFeature.id else { return }
             Task { await env.refreshAvailableEndpoints() }
+        }
+        .onChange(of: env.sessionManager.activeSession) { _, newSession in
+            guard let newSession else { return }
+            selectedFeatureID = "chat"
+            showCompactDetail()
+
+            guard env.viewModel.activeSession?.id != newSession.id else { return }
+            Task { await env.viewModel.switchToSession(newSession) }
+        }
+        #if os(iOS)
+        .onChange(of: horizontalSizeClass) { _, newSizeClass in
+            guard newSizeClass != .compact else { return }
+            columnVisibility = .automatic
+        }
+        #endif
+        .onChange(of: env.viewModel.activeBackendName, initial: true) { _, _ in
+            ToolsFeature.updateAdvertisement(in: env)
         }
     }
 
@@ -70,15 +124,7 @@ struct RootView: View {
         VStack(spacing: 0) {
             SessionListView()
             Divider()
-            List(selection: $selectedFeatureID) {
-                Label("Chat", systemImage: "bubble.left.and.bubble.right")
-                    .tag("chat")
-                    .accessibilityIdentifier("chat-sidebar-row")
-
-                ForEach(features) { entry in
-                    Label(entry.title, systemImage: entry.systemImage)
-                }
-            }
+            featureList
         }
         .navigationTitle("Chats")
         .toolbar {
@@ -91,6 +137,81 @@ struct RootView: View {
                 .keyboardShortcut("n", modifiers: .command)
             }
         }
+    }
+
+    @ViewBuilder
+    private var featureList: some View {
+        #if os(iOS)
+        if horizontalSizeClass == .compact {
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    featureButton(
+                        id: "chat",
+                        title: "Chat",
+                        systemImage: "bubble.left.and.bubble.right"
+                    )
+
+                    ForEach(features) { entry in
+                        Divider()
+                        featureButton(
+                            id: entry.id,
+                            title: entry.title,
+                            systemImage: entry.systemImage
+                        )
+                    }
+                }
+            }
+            .accessibilityIdentifier("feature-sidebar-list")
+        } else {
+            List(selection: $selectedFeatureID) {
+                Label("Chat", systemImage: "bubble.left.and.bubble.right")
+                    .tag("chat")
+
+                ForEach(features) { entry in
+                    Label(entry.title, systemImage: entry.systemImage)
+                        .tag(entry.id)
+                }
+            }
+        }
+        #else
+        // Keep the native selection affordance on macOS. On compact iPhones,
+        // stacking this feature region as a second List below SessionListView
+        // can swallow lower-row actions even when the row reports hittable.
+        List(selection: $selectedFeatureID) {
+            Label("Chat", systemImage: "bubble.left.and.bubble.right")
+                .tag("chat")
+                .accessibilityIdentifier("chat-sidebar-row")
+
+            ForEach(features) { entry in
+                Label(entry.title, systemImage: entry.systemImage)
+                    .tag(entry.id)
+            }
+        }
+        #endif
+    }
+
+    #if os(iOS)
+    private func featureButton(id: String, title: String, systemImage: String) -> some View {
+        Button(action: { selectFeature(id) }) {
+            Label(title, systemImage: systemImage)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+        }
+        .buttonStyle(.plain)
+        .background(selectedFeatureID == id ? Color.accentColor.opacity(0.14) : Color.clear)
+        .accessibilityAddTraits(selectedFeatureID == id ? .isSelected : [])
+        .accessibilityIdentifier("feature-sidebar-row-\(id)")
+    }
+    #endif
+
+    private func selectFeature(_ id: String) {
+        selectedFeatureID = id
+        // `onChange` does not fire for a re-tap of the already-selected row,
+        // but reasserting the compact detail column is still required when
+        // the sidebar is currently presented over it.
+        showCompactDetail()
     }
 
     @ViewBuilder
@@ -143,6 +264,14 @@ struct RootView: View {
         )
     }
 
+    private func showCompactDetail() {
+        #if os(iOS)
+        guard horizontalSizeClass == .compact else { return }
+        columnVisibility = .detailOnly
+        preferredCompactColumn = .detail
+        #endif
+    }
+
     private func createSession() {
         Task {
             do {
@@ -159,6 +288,22 @@ struct RootView: View {
         #else
         .automatic
         #endif
+    }
+
+    private var approvalSheetIsPresented: Binding<Bool> {
+        Binding(
+            get: {
+                !LaunchArguments.runsToolApprovalFlow
+                    && !env.toolApprovalGate.pending.isEmpty
+            },
+            set: { isPresented in
+                guard !isPresented, let call = env.toolApprovalGate.pending.first else { return }
+                env.toolApprovalGate.resolve(
+                    callId: call.id,
+                    with: .denied(reason: "dismissed")
+                )
+            }
+        )
     }
 }
 

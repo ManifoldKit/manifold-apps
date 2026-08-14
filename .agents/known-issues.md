@@ -26,3 +26,18 @@ form row instead of a chat session. Detect sidebar visibility only from its
 title, New Chat button, or a row with the explicit `session-row` identifier;
 keep the generic-cell fallback only for lookup after the sidebar is known to
 be visible.
+
+## Compact feature navigation must avoid sibling `List` hit-routing
+
+On a compact iPhone 16, the sidebar's sibling `SessionListView` and feature
+`List` can report a lower feature button as existing and hittable, synthesize
+its tap, yet never run the button action. First-row Tools still passes while
+fifth-row Theming fails, and an artificial pre-tap list scroll makes Theming
+pass, proving the stacked-list hit-routing/position is causal rather than the
+detail transition. Render the iOS feature region as a `ScrollView` with a
+`LazyVStack` of full-width plain `Button`s that synchronously select the
+feature and reassert the detail column. Keep stable
+`feature-sidebar-row-<id>` identifiers inside `feature-sidebar-list`, and keep
+macOS's native `List(selection:)` + tags. UI tests should target the identified
+buttons, use only bounded pre-activation scrolling when a row is genuinely
+not hittable, then assert the app-owned detail directly.

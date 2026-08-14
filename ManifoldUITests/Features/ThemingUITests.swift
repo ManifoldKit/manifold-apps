@@ -45,6 +45,10 @@ final class ThemingUITests: XCTestCase {
         classicOption.tap()
 
         let updatedLabel = app.descendants(matching: .any)["theming-corner-radius-label"]
+        XCTAssertTrue(
+            waitForElement(updatedLabel, timeout: 5),
+            "Theming showcase should keep its live-preview readout after changing presets"
+        )
         let updatedValue = updatedLabel.label
         XCTAssertTrue(
             updatedValue.contains("16pt"),
@@ -57,20 +61,26 @@ final class ThemingUITests: XCTestCase {
         )
 
         showSidebarIfNeeded(app: app)
-        let cloudRow = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label == 'Cloud'"))
-            .firstMatch
-        XCTAssertTrue(waitForElement(cloudRow, timeout: 5), "Sidebar should list a Cloud row")
+        let selectedThemingRow = app.buttons["feature-sidebar-row-theming"]
+        XCTAssertTrue(
+            waitForElement(selectedThemingRow, timeout: 5) && selectedThemingRow.isSelected,
+            "Reopened compact sidebar should expose Theming as the selected feature"
+        )
+        let cloudRow = app.buttons["feature-sidebar-row-cloud"]
+        XCTAssertTrue(
+            waitForElement(cloudRow, timeout: 5) && cloudRow.isHittable,
+            "Sidebar should expose a tappable Cloud button"
+        )
         cloudRow.tap()
 
-        showSidebarIfNeeded(app: app)
-        let themingRow = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label == 'Theming'"))
-            .firstMatch
-        XCTAssertTrue(waitForElement(themingRow, timeout: 5), "Sidebar should still list a Theming row")
-        themingRow.tap()
+        navigateToTheming()
 
-        let restoredValue = app.descendants(matching: .any)["theming-corner-radius-label"].label
+        let restoredLabel = app.descendants(matching: .any)["theming-corner-radius-label"]
+        XCTAssertTrue(
+            waitForElement(restoredLabel, timeout: 5),
+            "Theming showcase should restore its live-preview readout after reconstruction"
+        )
+        let restoredValue = restoredLabel.label
         XCTAssertTrue(
             restoredValue.contains("16pt"),
             "Classic must remain selected after the feature view is reconstructed, got: \(restoredValue)"
@@ -87,8 +97,28 @@ final class ThemingUITests: XCTestCase {
     private func navigateToTheming() {
         showSidebarIfNeeded(app: app)
 
-        let row = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'Theming'")).firstMatch
-        XCTAssertTrue(waitForElement(row, timeout: 5), "Sidebar should list a Theming row")
+        let featureList = app.descendants(matching: .any)["feature-sidebar-list"]
+        XCTAssertTrue(
+            waitForElement(featureList, timeout: 2),
+            "Sidebar should expose the identified feature list"
+        )
+
+        let row = app.buttons["feature-sidebar-row-theming"]
+
+        for _ in 0..<4 where !row.exists || !row.isHittable {
+            featureList.swipeUp()
+        }
+        XCTAssertTrue(
+            row.exists && row.isHittable,
+            "Theming button should become hittable after bounded feature-list scrolling; "
+                + "list=\(featureList.frame), row=\(row.frame)"
+        )
         row.tap()
+
+        let readout = app.descendants(matching: .any)["theming-corner-radius-label"]
+        XCTAssertTrue(
+            waitForElement(readout, timeout: 5),
+            "Tapping the Theming row should reveal its detail"
+        )
     }
 }

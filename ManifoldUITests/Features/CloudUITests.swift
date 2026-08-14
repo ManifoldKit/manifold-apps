@@ -141,16 +141,13 @@ final class CloudUITests: XCTestCase {
         // endpoint list from the store. The resulting row is the proof that
         // persistence is connected to the chat surface, not only to this form.
         showSidebarIfNeeded(app: app)
-        let chatRow = app.staticTexts["chat-sidebar-row"]
+        let chatRow = app.buttons["feature-sidebar-row-chat"]
         XCTAssertTrue(
             chatRow.waitForExistence(timeout: 5),
             "Sidebar should expose an explicit route back to ChatView"
         )
-        if chatRow.isHittable {
-            chatRow.tap()
-        } else {
-            chatRow.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        }
+        XCTAssertTrue(chatRow.isHittable, "Chat sidebar button should be directly tappable")
+        chatRow.tap()
 
         let chip = app.descendants(matching: .any)["chat-model-switcher-chip"]
         XCTAssertTrue(chip.waitForExistence(timeout: 5) && chip.isHittable, "Chat should expose its model switcher")
@@ -199,17 +196,7 @@ final class CloudUITests: XCTestCase {
     private func navigateToCloudFeature() {
         showSidebarIfNeeded(app: app)
 
-        let cloudRow: XCUIElement = {
-            if app.buttons["Cloud"].waitForExistence(timeout: 2) {
-                return app.buttons["Cloud"]
-            }
-            if app.cells["Cloud"].waitForExistence(timeout: 1) {
-                return app.cells["Cloud"]
-            }
-            return app.descendants(matching: .any)
-                .matching(NSPredicate(format: "label == 'Cloud'"))
-                .firstMatch
-        }()
+        let cloudRow = app.buttons["feature-sidebar-row-cloud"]
 
         guard waitForElement(cloudRow, timeout: 5) else {
             captureScreenshot(name: "Cloud-Nav-Row-Not-Found")

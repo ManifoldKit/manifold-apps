@@ -17,6 +17,20 @@ enum LaunchArguments {
         isUITesting && CommandLine.arguments.contains("--show-api-key-recovery")
     }
 
+    /// Selects the history-aware approval-flow backend and inline approval
+    /// presentation used by `ToolsUITests`. Kept opt-in so the ordinary smoke
+    /// tests retain their token-only scripted turns.
+    static var runsToolApprovalFlow: Bool {
+        isUITesting && CommandLine.arguments.contains("--tool-approval-test")
+    }
+
+    /// Gives the deterministic backend the published OpenAI Responses provider
+    /// identity so the Tools browser can prove the full reference catalog
+    /// remains available on that cloud path without contacting a live provider.
+    static var showsCloudToolCatalog: Bool {
+        isUITesting && CommandLine.arguments.contains("--cloud-tool-catalog-test")
+    }
+
     /// The value following `--scenario <id>`, if present. Reserved for the
     /// future `ScenariosFeature` (mirrors core's `--bck-demo-scenario`);
     /// unused until that feature is ported.
