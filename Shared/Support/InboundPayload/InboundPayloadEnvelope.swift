@@ -75,5 +75,12 @@ enum ManifoldAppGroup {
         "manifold.inbound.\(handoffID.uuidString)"
     }
 
+    /// Marks a resolved current pointer. The bounded marker preserves
+    /// single-slot last-wins semantics when that pointer later refers to its
+    /// already-consumed or failed unique payload.
+    static func inboundConsumedKey(_ handoffID: UUID) -> String {
+        "manifold.inbound.consumed.\(handoffID.uuidString)"
+    }
+
     static let pendingShareKey = "manifold.pending-share"
 }

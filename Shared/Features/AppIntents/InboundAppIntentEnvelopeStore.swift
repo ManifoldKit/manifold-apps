@@ -5,9 +5,10 @@ import ManifoldInference
 /// startup reader. Keeping encode/write and take/decode here prevents the two
 /// processes from quietly drifting onto different suites, keys, or formats.
 /// A shared pointer records the latest handoff ID, while each envelope is
-/// stored under its own key. This is intentionally last-pointer-wins: stale
-/// payload keys are harmless and a failed writer can never delete the newer
-/// pointer or payload.
+/// stored under its own key. A bounded consumed-current marker preserves the
+/// intentional last-pointer-wins behavior after a successful take, while a
+/// failed writer (which never creates that marker) may still recover the
+/// earlier payload it masked.
 enum InboundAppIntentEnvelopeStore {
     /// An App Intent handoff is transient. This caps recovery of orphaned
     /// unique payload keys left by a terminated/failed writer.
@@ -76,25 +77,59 @@ enum InboundAppIntentEnvelopeStore {
         now: Date,
         maximumAge: TimeInterval
     ) -> TakeResult {
+        pruneExpiredTombstones(from: defaults, now: now, maximumAge: maximumAge)
+        var suppressCandidatesAtOrBefore: Date?
+        var stalePointerHandoffID: UUID?
         if let rawHandoffID = defaults.string(forKey: ManifoldAppGroup.inboundKey),
            let handoffID = UUID(uuidString: rawHandoffID) {
             let payloadKey = ManifoldAppGroup.inboundPayloadKey(handoffID)
             if let data = defaults.data(forKey: payloadKey) {
                 defaults.removeObject(forKey: payloadKey)
-                let currentResult = decode(data, now: now, maximumAge: maximumAge)
+                let currentResult = decode(data, now: now, maximumAge: maximumAge) { envelope in
+                    markCurrentConsumed(envelope, in: defaults)
+                }
                 switch currentResult {
                 case .payload, .malformed:
                     // Preserve malformed-current reporting; only missing or
                     // expired current payloads may recover an older orphan.
                     return currentResult
                 case .empty, .appGroupUnavailable:
+                    stalePointerHandoffID = handoffID
                     break
+                }
+            } else {
+                if let consumedAt = takeConsumedMarker(
+                    for: handoffID,
+                    from: defaults,
+                    now: now,
+                    maximumAge: maximumAge
+                ) {
+                    // A successfully delivered B must not later expose an
+                    // older A merely because the stable pointer still names B.
+                    suppressCandidatesAtOrBefore = consumedAt
+                } else {
+                    stalePointerHandoffID = handoffID
                 }
             }
         }
 
-        if let recovered = takeNewestFreshCandidate(from: defaults, now: now, maximumAge: maximumAge) {
-            return recovered
+        if let recovered = takeNewestFreshCandidate(
+            from: defaults,
+            now: now,
+            maximumAge: maximumAge,
+            suppressingAtOrBefore: suppressCandidatesAtOrBefore
+        ) {
+            if let stalePointerHandoffID {
+                // A failed/expired B that falls back to A has now resolved
+                // the single-slot timeline through A. Use A's timestamp, not
+                // `now`, so a concurrent newer C remains eligible.
+                markPointerResolved(
+                    stalePointerHandoffID,
+                    at: recovered.createdAt,
+                    in: defaults
+                )
+            }
+            return payloadResult(for: recovered)
         }
 
         // Upgrade path for envelopes written before unique payload keys and
@@ -109,12 +144,18 @@ enum InboundAppIntentEnvelopeStore {
         return decodeLegacyRawSlot(legacyData)
     }
 
-    private static func decode(_ data: Data, now: Date, maximumAge: TimeInterval) -> TakeResult {
+    private static func decode(
+        _ data: Data,
+        now: Date,
+        maximumAge: TimeInterval,
+        onFreshEnvelope: (InboundPayloadEnvelope) -> Void = { _ in }
+    ) -> TakeResult {
         do {
             let envelope = try JSONDecoder().decode(InboundPayloadEnvelope.self, from: data)
             guard isFresh(envelope, now: now, maximumAge: maximumAge) else {
                 return .empty
             }
+            onFreshEnvelope(envelope)
             return payloadResult(for: envelope)
         } catch {
             return .malformed(error)
@@ -147,8 +188,9 @@ enum InboundAppIntentEnvelopeStore {
     private static func takeNewestFreshCandidate(
         from defaults: UserDefaults,
         now: Date,
-        maximumAge: TimeInterval
-    ) -> TakeResult? {
+        maximumAge: TimeInterval,
+        suppressingAtOrBefore: Date?
+    ) -> InboundPayloadEnvelope? {
         var candidates: [(key: String, envelope: InboundPayloadEnvelope)] = []
         for (key, value) in defaults.dictionaryRepresentation() {
             guard let handoffID = handoffID(forPayloadKey: key),
@@ -166,6 +208,11 @@ enum InboundAppIntentEnvelopeStore {
                     defaults.removeObject(forKey: key)
                     continue
                 }
+                if let suppressingAtOrBefore,
+                   envelope.createdAt <= suppressingAtOrBefore {
+                    defaults.removeObject(forKey: key)
+                    continue
+                }
                 candidates.append((key, envelope))
             } catch {
                 defaults.removeObject(forKey: key)
@@ -177,7 +224,56 @@ enum InboundAppIntentEnvelopeStore {
             return nil
         }
         defaults.removeObject(forKey: newest.key)
-        return payloadResult(for: newest.envelope)
+        return newest.envelope
+    }
+
+    private static func markCurrentConsumed(
+        _ envelope: InboundPayloadEnvelope,
+        in defaults: UserDefaults
+    ) {
+        markPointerResolved(envelope.handoffID, at: envelope.createdAt, in: defaults)
+    }
+
+    private static func markPointerResolved(
+        _ handoffID: UUID,
+        at createdAt: Date,
+        in defaults: UserDefaults
+    ) {
+        defaults.set(
+            createdAt.timeIntervalSinceReferenceDate,
+            forKey: ManifoldAppGroup.inboundConsumedKey(handoffID)
+        )
+    }
+
+    private static func takeConsumedMarker(
+        for handoffID: UUID,
+        from defaults: UserDefaults,
+        now: Date,
+        maximumAge: TimeInterval
+    ) -> Date? {
+        let key = ManifoldAppGroup.inboundConsumedKey(handoffID)
+        guard let timestamp = defaults.object(forKey: key) as? Double else { return nil }
+        let consumedAt = Date(timeIntervalSinceReferenceDate: timestamp)
+        defaults.removeObject(forKey: key)
+        guard now.timeIntervalSince(consumedAt) <= maximumAge else { return nil }
+        return consumedAt
+    }
+
+    private static func pruneExpiredTombstones(
+        from defaults: UserDefaults,
+        now: Date,
+        maximumAge: TimeInterval
+    ) {
+        for (key, value) in defaults.dictionaryRepresentation() {
+            guard key.hasPrefix("\(ManifoldAppGroup.legacyInboundKey).consumed."),
+                  let timestamp = value as? Double else {
+                continue
+            }
+            let consumedAt = Date(timeIntervalSinceReferenceDate: timestamp)
+            if now.timeIntervalSince(consumedAt) > maximumAge {
+                defaults.removeObject(forKey: key)
+            }
+        }
     }
 
     private static func handoffID(forPayloadKey key: String) -> UUID? {
@@ -205,6 +301,7 @@ enum InboundAppIntentEnvelopeStore {
         if let rawHandoffID = defaults.string(forKey: ManifoldAppGroup.inboundKey),
            let handoffID = UUID(uuidString: rawHandoffID) {
             defaults.removeObject(forKey: ManifoldAppGroup.inboundPayloadKey(handoffID))
+            defaults.removeObject(forKey: ManifoldAppGroup.inboundConsumedKey(handoffID))
         }
         defaults.removeObject(forKey: ManifoldAppGroup.inboundKey)
         defaults.removeObject(forKey: ManifoldAppGroup.legacyInboundKey)

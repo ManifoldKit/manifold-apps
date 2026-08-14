@@ -99,7 +99,75 @@ final class AppIntentsUITests: XCTestCase {
         XCTAssertEqual(prompt(in: result), "A")
     }
 
-    func test_envelopeStore_takesCurrentThenRecoversEarlierFreshPayload() throws {
+    func test_envelopeStore_failedWriterFallbackSuppressesOlderHistory() throws {
+        guard let defaults = makeIsolatedEnvelopeDefaults() else {
+            XCTFail("An isolated UserDefaults suite is required for the handoff store test")
+            return
+        }
+        let now = Date(timeIntervalSinceReferenceDate: 1_000_000)
+        let oldest = InboundPayloadEnvelope(prompt: "O", source: "appIntent", createdAt: now.addingTimeInterval(-3))
+        let recovered = InboundPayloadEnvelope(prompt: "A", source: "appIntent", createdAt: now.addingTimeInterval(-2))
+        let failedLater = InboundPayloadEnvelope(prompt: "B", source: "appIntent", createdAt: now.addingTimeInterval(-1))
+        try InboundAppIntentEnvelopeStore.write(oldest, to: defaults)
+        try InboundAppIntentEnvelopeStore.write(recovered, to: defaults)
+        try InboundAppIntentEnvelopeStore.write(failedLater, to: defaults)
+        InboundAppIntentEnvelopeStore.discardWrittenPayload(failedLater.handoffID, from: defaults)
+
+        let first = InboundAppIntentEnvelopeStore.take(
+            from: defaults,
+            now: now,
+            maximumAge: InboundAppIntentEnvelopeStore.maximumEnvelopeAge
+        )
+        let second = InboundAppIntentEnvelopeStore.take(
+            from: defaults,
+            now: now,
+            maximumAge: InboundAppIntentEnvelopeStore.maximumEnvelopeAge
+        )
+
+        XCTAssertEqual(prompt(in: first), "A")
+        XCTAssertNil(prompt(in: second), "Fallback must resolve B through A instead of replaying older O")
+        XCTAssertNil(defaults.data(forKey: ManifoldAppGroup.inboundPayloadKey(oldest.handoffID)))
+    }
+
+    func test_envelopeStore_failedWriterFallbackLeavesNewerCandidateEligible() throws {
+        guard let defaults = makeIsolatedEnvelopeDefaults() else {
+            XCTFail("An isolated UserDefaults suite is required for the handoff store test")
+            return
+        }
+        let now = Date(timeIntervalSinceReferenceDate: 1_000_000)
+        let oldest = InboundPayloadEnvelope(prompt: "O", source: "appIntent", createdAt: now.addingTimeInterval(-3))
+        let recovered = InboundPayloadEnvelope(prompt: "A", source: "appIntent", createdAt: now.addingTimeInterval(-2))
+        let failedLater = InboundPayloadEnvelope(prompt: "B", source: "appIntent", createdAt: now.addingTimeInterval(-1))
+        try InboundAppIntentEnvelopeStore.write(oldest, to: defaults)
+        try InboundAppIntentEnvelopeStore.write(recovered, to: defaults)
+        try InboundAppIntentEnvelopeStore.write(failedLater, to: defaults)
+        InboundAppIntentEnvelopeStore.discardWrittenPayload(failedLater.handoffID, from: defaults)
+
+        let first = InboundAppIntentEnvelopeStore.take(
+            from: defaults,
+            now: now,
+            maximumAge: InboundAppIntentEnvelopeStore.maximumEnvelopeAge
+        )
+        XCTAssertEqual(prompt(in: first), "A")
+
+        // Simulates C landing after the failed B route but before the next
+        // app read. It deliberately does not replace B's stale pointer.
+        let newer = InboundPayloadEnvelope(prompt: "C", source: "appIntent", createdAt: now)
+        defaults.set(
+            try JSONEncoder().encode(newer),
+            forKey: ManifoldAppGroup.inboundPayloadKey(newer.handoffID)
+        )
+        let second = InboundAppIntentEnvelopeStore.take(
+            from: defaults,
+            now: now,
+            maximumAge: InboundAppIntentEnvelopeStore.maximumEnvelopeAge
+        )
+
+        XCTAssertEqual(prompt(in: second), "C", "A fallback tombstone must not suppress later C")
+        XCTAssertNil(defaults.data(forKey: ManifoldAppGroup.inboundPayloadKey(oldest.handoffID)))
+    }
+
+    func test_envelopeStore_takesCurrentThenSuppressesEarlierPayload() throws {
         guard let defaults = makeIsolatedEnvelopeDefaults() else {
             XCTFail("An isolated UserDefaults suite is required for the handoff store test")
             return
@@ -121,7 +189,9 @@ final class AppIntentsUITests: XCTestCase {
             maximumAge: InboundAppIntentEnvelopeStore.maximumEnvelopeAge
         )
         XCTAssertEqual(prompt(in: first), "B")
-        XCTAssertEqual(prompt(in: second), "A")
+        XCTAssertNil(prompt(in: second), "A successful current B preserves single-slot last-wins semantics")
+        XCTAssertNil(defaults.data(forKey: ManifoldAppGroup.inboundPayloadKey(earlier.handoffID)))
+        XCTAssertNil(defaults.object(forKey: ManifoldAppGroup.inboundConsumedKey(current.handoffID)))
     }
 
     func test_envelopeStore_prunesExpiredOrphanWithoutDeliveringIt() throws {
