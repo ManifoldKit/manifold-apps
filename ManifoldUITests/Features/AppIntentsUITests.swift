@@ -21,6 +21,7 @@ final class AppIntentsUITests: XCTestCase {
         XCTAssertEqual(decoded.prompt, "summarize this article")
         XCTAssertEqual(decoded.source, "appIntent")
         XCTAssertTrue(decoded.attachments.isEmpty)
+        XCTAssertEqual(decoded.handoffID, envelope.handoffID)
     }
 
     func test_envelope_roundTripsAttachmentsEndToEnd() throws {
@@ -37,6 +38,7 @@ final class AppIntentsUITests: XCTestCase {
         XCTAssertEqual(decoded.prompt, "act on the attached payload")
         XCTAssertEqual(decoded.source, "shareExtension")
         XCTAssertEqual(decoded.attachments, attachments)
+        XCTAssertEqual(decoded.handoffID, envelope.handoffID)
     }
 
     func test_envelope_decodesLegacyShapeWithoutAttachmentsField() throws {
@@ -49,6 +51,9 @@ final class AppIntentsUITests: XCTestCase {
         XCTAssertEqual(decoded.prompt, "hello")
         XCTAssertEqual(decoded.source, "appIntent")
         XCTAssertTrue(decoded.attachments.isEmpty)
+        // Legacy envelopes did not carry a compare-and-remove token. Decoding
+        // still succeeds and assigns one for the in-process representation.
+        XCTAssertFalse(decoded.handoffID.uuidString.isEmpty)
     }
 
     func test_envelope_emitsAttachmentsKeyWhenNonEmpty() throws {
@@ -63,6 +68,7 @@ final class AppIntentsUITests: XCTestCase {
 
         XCTAssertNotNil(object?["attachments"])
         XCTAssertEqual((object?["attachments"] as? [Any])?.count, 1)
+        XCTAssertEqual(object?["handoffID"] as? String, envelope.handoffID.uuidString)
     }
 
     // MARK: - Readiness-aware delivery
@@ -71,12 +77,12 @@ final class AppIntentsUITests: XCTestCase {
     func test_pendingPayload_waitsForReadyThenDrainsExactlyOnce() async {
         let buffer = PendingPayloadBuffer()
         let payload = InboundPayload(prompt: "deliver after load", source: .appIntent)
-        await buffer.store(payload)
+        let generation = await buffer.store(payload)
 
         let (updates, continuation) = AsyncStream<ModelLoadReadinessState>.makeStream()
         let recorder = PayloadRecorder()
         let delivery = Task {
-            await buffer.deliverWhenModelReady(readinessUpdates: updates) { inbound in
+            await buffer.deliverWhenModelReady(generation: generation, readinessUpdates: updates) { inbound in
                 recorder.record(inbound)
             }
         }
@@ -103,7 +109,7 @@ final class AppIntentsUITests: XCTestCase {
     @MainActor
     func test_pendingPayload_streamEndingBeforeReadyRetainsPayloadAndReportsDegradedState() async {
         let buffer = PendingPayloadBuffer()
-        await buffer.store(InboundPayload(prompt: "keep me", source: .appIntent))
+        let generation = await buffer.store(InboundPayload(prompt: "keep me", source: .appIntent))
         let recorder = PayloadRecorder()
         let updates = AsyncStream<ModelLoadReadinessState> { continuation in
             continuation.yield(.idle)
@@ -111,7 +117,7 @@ final class AppIntentsUITests: XCTestCase {
             continuation.finish()
         }
 
-        await buffer.deliverWhenModelReady(readinessUpdates: updates) { inbound in
+        await buffer.deliverWhenModelReady(generation: generation, readinessUpdates: updates) { inbound in
             recorder.record(inbound)
         }
 
@@ -138,10 +144,10 @@ final class AppIntentsUITests: XCTestCase {
 
         let buffer = PendingPayloadBuffer()
         let recorder = PayloadRecorder()
-        await buffer.store(InboundPayload(prompt: "warm scene payload", source: .appIntent))
+        let generation = await buffer.store(InboundPayload(prompt: "warm scene payload", source: .appIntent))
         let (updates, continuation) = AsyncStream<ModelLoadReadinessState>.makeStream()
         let delivery = Task {
-            await buffer.deliverWhenModelReady(readinessUpdates: updates) { inbound in
+            await buffer.deliverWhenModelReady(generation: generation, readinessUpdates: updates) { inbound in
                 recorder.record(inbound)
             }
         }
@@ -154,6 +160,46 @@ final class AppIntentsUITests: XCTestCase {
         continuation.finish()
         await delivery.value
         XCTAssertEqual(recorder.payloads.map(\.prompt), ["warm scene payload"])
+    }
+
+    /// A warm URL can replace the pending payload between its store and the
+    /// predecessor task's cancellation. The older task must not drain that
+    /// newer slot merely because it observed `.ready` first. Sabotage
+    /// rationale: removing the generation equality check immediately before
+    /// `drain()` makes the predecessor deliver "newer warm payload" and this
+    /// test fail.
+    @MainActor
+    func test_pendingPayload_replacementDoesNotLetOlderDeliveryDrainNewerPayload() async {
+        let buffer = PendingPayloadBuffer()
+        let recorder = PayloadRecorder()
+        let firstGeneration = await buffer.store(InboundPayload(prompt: "first warm payload", source: .appIntent))
+        let (firstUpdates, firstContinuation) = AsyncStream<ModelLoadReadinessState>.makeStream()
+        let firstDelivery = Task {
+            await buffer.deliverWhenModelReady(generation: firstGeneration, readinessUpdates: firstUpdates) { inbound in
+                recorder.record(inbound)
+            }
+        }
+
+        firstContinuation.yield(.loading(progress: 0.5))
+        await waitForDeliveryState(.waitingForModel, in: buffer)
+
+        let newerGeneration = await buffer.store(InboundPayload(prompt: "newer warm payload", source: .appIntent))
+        firstContinuation.yield(.ready)
+        firstContinuation.finish()
+        await firstDelivery.value
+
+        XCTAssertTrue(recorder.payloads.isEmpty, "A predecessor must not consume the replacement payload")
+        let retainedReplacement = await buffer.peek()
+        XCTAssertEqual(retainedReplacement?.prompt, "newer warm payload")
+
+        let readyUpdates = AsyncStream<ModelLoadReadinessState> { continuation in
+            continuation.yield(.ready)
+            continuation.finish()
+        }
+        await buffer.deliverWhenModelReady(generation: newerGeneration, readinessUpdates: readyUpdates) { inbound in
+            recorder.record(inbound)
+        }
+        XCTAssertEqual(recorder.payloads.map(\.prompt), ["newer warm payload"])
     }
 
     func test_backgroundReadinessGate_waitsBeforeGenerating() async throws {
@@ -179,7 +225,7 @@ final class AppIntentsUITests: XCTestCase {
         XCTAssertTrue(generatedAfterReady)
     }
 
-    func test_backgroundReadinessGate_reportsEndedStreamWithoutGenerating() async {
+    func test_backgroundReadinessGate_reportsUnavailableStreamWithoutGenerating() async {
         let updates = AsyncStream<ModelLoadReadinessState> { $0.finish() }
         let probe = ReadinessGateProbe()
 
@@ -193,12 +239,152 @@ final class AppIntentsUITests: XCTestCase {
             )
             XCTFail("A readiness stream that ends before .ready must report a failure")
         } catch let error as AppIntentModelReadinessGate.Error {
-            XCTAssertEqual(error, .streamEndedBeforeModelReady)
+            XCTAssertEqual(error, .modelUnavailable)
         } catch {
             XCTFail("Expected the explicit readiness failure, got \(error)")
         }
         let generatedAfterFailure = await probe.didGenerate
         XCTAssertFalse(generatedAfterFailure, "The red readiness path must not invoke inference")
+    }
+
+    func test_backgroundReadinessGate_failsImmediatelyWhenModelIsIdle() async {
+        let updates = AsyncStream<ModelLoadReadinessState> { continuation in
+            continuation.yield(.idle)
+        }
+        let probe = ReadinessGateProbe()
+
+        do {
+            _ = try await AppIntentModelReadinessGate.executeWhenReady(
+                waitForReadiness: {
+                    try await AppIntentModelReadinessGate.waitUntilReady(
+                        updates,
+                        maxPollCount: 10,
+                        pollIntervalNanoseconds: 1_000_000
+                    )
+                },
+                work: {
+                    await probe.recordGeneration()
+                    return "unreachable"
+                }
+            )
+            XCTFail("An idle model must fail without waiting for a future load")
+        } catch let error as AppIntentModelReadinessGate.Error {
+            XCTAssertEqual(error, .modelUnavailable)
+        } catch {
+            XCTFail("Expected model-unavailable failure, got \(error)")
+        }
+        let generatedAfterIdle = await probe.didGenerate
+        XCTAssertFalse(generatedAfterIdle)
+    }
+
+    func test_backgroundReadinessGate_timesOutLoadingWithoutGenerating() async {
+        let updates = AsyncStream<ModelLoadReadinessState> { continuation in
+            continuation.yield(.loading(progress: 0.1))
+        }
+        let probe = ReadinessGateProbe()
+
+        do {
+            _ = try await AppIntentModelReadinessGate.executeWhenReady(
+                waitForReadiness: {
+                    try await AppIntentModelReadinessGate.waitUntilReady(
+                        updates,
+                        maxPollCount: 1,
+                        pollIntervalNanoseconds: 1_000_000
+                    )
+                },
+                work: {
+                    await probe.recordGeneration()
+                    return "unreachable"
+                }
+            )
+            XCTFail("A loading model that never reaches ready must time out")
+        } catch let error as AppIntentModelReadinessGate.Error {
+            XCTAssertEqual(error, .modelUnavailable)
+        } catch {
+            XCTFail("Expected bounded model-unavailable failure, got \(error)")
+        }
+        let generatedAfterTimeout = await probe.didGenerate
+        XCTAssertFalse(generatedAfterTimeout)
+    }
+
+    func test_backgroundReadinessGate_cancellationDoesNotGenerate() async {
+        let updates = AsyncStream<ModelLoadReadinessState> { continuation in
+            continuation.yield(.loading(progress: 0.1))
+        }
+        let probe = ReadinessGateProbe()
+        let task = Task {
+            try await AppIntentModelReadinessGate.executeWhenReady(
+                waitForReadiness: {
+                    try await AppIntentModelReadinessGate.waitUntilReady(
+                        updates,
+                        maxPollCount: 600,
+                        pollIntervalNanoseconds: 50_000_000
+                    )
+                },
+                work: {
+                    await probe.recordGeneration()
+                    return "unreachable"
+                }
+            )
+        }
+
+        task.cancel()
+        do {
+            _ = try await task.value
+            XCTFail("Cancellation must escape the readiness gate")
+        } catch is CancellationError {
+            // Expected: cancellation is not translated into an inference attempt.
+        } catch {
+            XCTFail("Expected CancellationError, got \(error)")
+        }
+        let generatedAfterCancellation = await probe.didGenerate
+        XCTAssertFalse(generatedAfterCancellation)
+    }
+
+    /// Covers the degraded route-open result without touching real App Group
+    /// defaults or UIKit. A later writer can replace the slot with identical
+    /// JSON content while `open` is in flight; the failed predecessor may
+    /// clear only its own unique handoff ID.
+    @MainActor
+    func test_failedWarmRouteOpenClearsOnlyTheEnvelopeItWrote() async {
+        let failedStorage = HandoffStorageProbe()
+        let failedEnvelope = UUID()
+        do {
+            try await InboundAppIntentHandoff.writeAndOpen(
+                write: { failedStorage.write(failedEnvelope) },
+                discardIfCurrent: { failedStorage.discardIfCurrent($0) },
+                open: { false }
+            )
+            XCTFail("A failed route open must report the degraded handoff")
+        } catch let error as InboundAppIntentHandoff.Error {
+            XCTAssertEqual(error, .failedToOpenRoute)
+        } catch {
+            XCTFail("Expected typed route-open failure, got \(error)")
+        }
+        XCTAssertNil(failedStorage.current, "A failed route open must not leave its payload for a later launch")
+
+        let storage = HandoffStorageProbe()
+        let identicalPayload = Data("{\"prompt\":\"same\"}".utf8)
+        let written = UUID()
+        let replacement = UUID()
+
+        do {
+            try await InboundAppIntentHandoff.writeAndOpen(
+                write: { storage.write(payload: identicalPayload, handoffID: written) },
+                discardIfCurrent: { storage.discardIfCurrent($0) },
+                open: {
+                    storage.write(payload: identicalPayload, handoffID: replacement)
+                    return false
+                }
+            )
+            XCTFail("A failed replacement route open must report the degraded handoff")
+        } catch let error as InboundAppIntentHandoff.Error {
+            XCTAssertEqual(error, .failedToOpenRoute)
+        } catch {
+            XCTFail("Expected typed route-open failure, got \(error)")
+        }
+
+        XCTAssertEqual(storage.current?.handoffID, replacement, "Failure cleanup must not erase an identical-content newer invocation")
     }
 
     // MARK: - UI-level: sidebar renders AppIntentsFeature's real content
@@ -304,6 +490,39 @@ final class AppIntentsUITests: XCTestCase {
         )
     }
 
+    /// Launches without a cold-start payload, then opens the app's registered
+    /// route while it is already running. The prompt can appear only if
+    /// RootView's real `.onOpenURL` closure takes the seeded App Group slot,
+    /// stages it, reinstalls readiness delivery, and ingests it into Chat.
+    func test_warmInboundURL_routesThroughRootViewIntoLiveChat() throws {
+        let prompt = "Warm URL AppIntent prompt"
+        let app = launchApp(additionalArguments: ["--warm-appintent-prompt", prompt])
+        openAppIntentsFeature(in: app)
+
+        let seedStatus = app.staticTexts["appintent-inbound-handoff-status"]
+        XCTAssertTrue(waitForElement(seedStatus, timeout: 5))
+        XCTAssertEqual(
+            seedStatus.label,
+            "Warm AppIntent UI-test envelope awaiting URL route.",
+            "The test seed must remain outside startup staging until the running scene receives its URL event"
+        )
+
+        guard let route = InboundAppIntentRoute.url else {
+            XCTFail("The registered warm AppIntent route must be constructible")
+            return
+        }
+        app.open(route)
+
+        openChatDetailIfNeeded(app: app)
+        let ingestedPrompt = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS[c] %@", prompt)
+        ).firstMatch
+        XCTAssertTrue(
+            waitForElement(ingestedPrompt, timeout: 15),
+            "The running scene must route manifold://ingest through RootView into the live Chat detail"
+        )
+    }
+
     func test_malformedColdLaunchEnvelope_isDiscardedAndReported() throws {
         let app = launchApp(additionalArguments: ["--appintent-malformed-envelope"])
         openAppIntentsFeature(in: app)
@@ -369,6 +588,33 @@ private final class PayloadRecorder {
 
     func record(_ payload: InboundPayload) {
         payloads.append(payload)
+    }
+}
+
+@MainActor
+private final class HandoffStorageProbe {
+    struct Entry: Equatable {
+        let payload: Data
+        let handoffID: UUID
+    }
+
+    private(set) var current: Entry?
+
+    @discardableResult
+    func write(_ handoffID: UUID) -> UUID {
+        current = Entry(payload: Data(), handoffID: handoffID)
+        return handoffID
+    }
+
+    @discardableResult
+    func write(payload: Data, handoffID: UUID) -> UUID {
+        current = Entry(payload: payload, handoffID: handoffID)
+        return handoffID
+    }
+
+    func discardIfCurrent(_ handoffID: UUID) {
+        guard current?.handoffID == handoffID else { return }
+        current = nil
     }
 }
 

@@ -16,11 +16,38 @@ enum InboundAppIntentEnvelopeStore {
         case appGroupUnavailable
     }
 
-    static func write(_ envelope: InboundPayloadEnvelope) throws {
+    /// Writes and returns the unique handoff ID stored in the envelope. The
+    /// caller retains it as a compare-and-remove token if foregrounding the
+    /// app fails; byte equality alone is not sufficient because two intents
+    /// can legitimately carry identical content.
+    @discardableResult
+    static func write(_ envelope: InboundPayloadEnvelope) throws -> UUID {
         guard let defaults = UserDefaults(suiteName: ManifoldAppGroup.identifier) else {
             throw StoreError.appGroupUnavailable
         }
-        defaults.set(try JSONEncoder().encode(envelope), forKey: ManifoldAppGroup.inboundKey)
+        let data = try JSONEncoder().encode(envelope)
+        defaults.set(data, forKey: ManifoldAppGroup.inboundKey)
+        return envelope.handoffID
+    }
+
+    /// Clears only the envelope written by the caller. If another invocation
+    /// replaced the single slot while UIKit tried to open the route, its newer
+    /// handoff must survive for that invocation.
+    static func discardIfCurrent(_ handoffID: UUID) {
+        guard let defaults = UserDefaults(suiteName: ManifoldAppGroup.identifier),
+              let data = defaults.data(forKey: ManifoldAppGroup.inboundKey) else {
+            return
+        }
+
+        let current: InboundPayloadEnvelope
+        do {
+            current = try JSONDecoder().decode(InboundPayloadEnvelope.self, from: data)
+        } catch {
+            Log.ui.warning("AppIntentsFeature: could not decode inbound envelope during failed-route cleanup: \(String(describing: error), privacy: .public)")
+            return
+        }
+        guard current.handoffID == handoffID else { return }
+        defaults.removeObject(forKey: ManifoldAppGroup.inboundKey)
     }
 
     /// Consumes the single-slot envelope: the key is removed before decode so

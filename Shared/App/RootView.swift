@@ -94,6 +94,11 @@ struct RootView: View {
             for feature in featureTypes {
                 feature.install(into: env)
             }
+            // This is a test-only write guarded by `--uitesting`; it happens
+            // after bootstrap and is intentionally not staged here. The warm
+            // AppIntents UI regression must exercise the real `onOpenURL`
+            // handoff below to consume it.
+            AppIntentsFeature.seedWarmInboundPayloadForUITestIfRequested()
         }
         .onChange(of: selectedFeatureID) { oldValue, newValue in
             if newValue != nil { showCompactDetail() }

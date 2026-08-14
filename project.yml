@@ -92,6 +92,7 @@ targets:
       - Shared/Support/InboundPayload/InboundPayloadEnvelope.swift
       - Shared/Support/InboundPayload/Concurrency/PendingPayloadBuffer.swift
       - Shared/Features/AppIntents/InboundAppIntentRoute.swift
+      - Shared/Features/AppIntents/InboundAppIntentHandoff.swift
       - Shared/Features/AppIntents/ModelReadinessGate.swift
     dependencies:
       - target: Manifold

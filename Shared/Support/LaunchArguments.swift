@@ -41,6 +41,14 @@ enum LaunchArguments {
         return value(after: "--appintent-prompt")
     }
 
+    /// Seeds an App Group envelope only after `RootView` is live, so the UI
+    /// suite can drive the real warm-scene `onOpenURL` handoff rather than the
+    /// cold-start bootstrap read. Never activates outside `--uitesting`.
+    static var warmAppIntentPrompt: String? {
+        guard isUITesting else { return nil }
+        return value(after: "--warm-appintent-prompt")
+    }
+
     /// Writes deliberately malformed App Group data for the degraded-path UI
     /// assertion. Never active outside deterministic UI-test launches.
     static var seedsMalformedAppIntentEnvelope: Bool {

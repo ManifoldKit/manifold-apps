@@ -6,7 +6,9 @@ import Foundation
 enum InboundAppIntentRoute {
     static let scheme = "manifold"
     static let host = "ingest"
-    static let url = URL(string: "\(scheme)://\(host)")!
+    static var url: URL? {
+        URL(string: "\(scheme)://\(host)")
+    }
 
     static func isInboundURL(_ url: URL) -> Bool {
         url.scheme?.caseInsensitiveCompare(scheme) == .orderedSame

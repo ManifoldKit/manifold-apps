@@ -27,14 +27,6 @@ import UIKit
 ///    InferenceService publishes model readiness.
 public struct AskManifoldAppIntent: AppIntent {
 
-    private enum Error: LocalizedError {
-        case failedToOpenInboundRoute
-
-        var errorDescription: String? {
-            "Manifold could not open its inbound handoff route."
-        }
-    }
-
     public static let title: LocalizedStringResource = "Ask Manifold"
 
     public static let description = IntentDescription(
@@ -68,19 +60,22 @@ public struct AskManifoldAppIntent: AppIntent {
             source: "appIntent"
         )
         do {
+            #if canImport(UIKit)
+            guard let route = InboundAppIntentRoute.url else {
+                throw InboundAppIntentHandoff.Error.invalidRoute
+            }
+            try await InboundAppIntentHandoff.writeAndOpen(
+                write: { try InboundAppIntentEnvelopeStore.write(envelope) },
+                discardIfCurrent: InboundAppIntentEnvelopeStore.discardIfCurrent,
+                open: { await UIApplication.shared.open(route, options: [:]) }
+            )
+            #else
             try InboundAppIntentEnvelopeStore.write(envelope)
+            #endif
         } catch {
-            Log.ui.error("AskManifoldAppIntent: failed to persist inbound envelope: \(String(describing: error), privacy: .public)")
+            Log.ui.error("AskManifoldAppIntent: failed to hand off inbound envelope: \(String(describing: error), privacy: .public)")
             throw error
         }
-
-        #if canImport(UIKit)
-        let didOpen = await UIApplication.shared.open(InboundAppIntentRoute.url, options: [:])
-        if !didOpen {
-            Log.ui.error("AskManifoldAppIntent: failed to open inbound handoff URL")
-            throw Error.failedToOpenInboundRoute
-        }
-        #endif
 
         return .result()
     }

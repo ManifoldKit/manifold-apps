@@ -2,28 +2,32 @@ import Foundation
 import ManifoldInference
 
 /// Readiness gate shared by the background App Intent handler and its focused
-/// tests. It observes the production readiness stream rather than guessing a
-/// delay: a background prompt must wait through `.idle`/`.loading`, and a
-/// stream ending before `.ready` is a visible failure rather than inference on
-/// an unloaded model.
+/// tests. It delegates to `InferenceService`'s production readiness helper:
+/// `.idle` fails immediately, `.loading` has its bounded timeout, and task
+/// cancellation is rethrown rather than silently becoming inference on an
+/// unloaded model.
 enum AppIntentModelReadinessGate {
     enum Error: LocalizedError, Equatable {
-        case streamEndedBeforeModelReady
+        case modelUnavailable
 
         var errorDescription: String? {
-            "Manifold stopped observing model readiness before a model became available."
+            "Manifold did not have a ready model for the background request."
         }
     }
 
     static func waitUntilReady(
-        _ readinessUpdates: AsyncStream<ModelLoadReadinessState>
+        _ readinessUpdates: AsyncStream<ModelLoadReadinessState>,
+        maxPollCount: Int = 300,
+        pollIntervalNanoseconds: UInt64 = 50_000_000
     ) async throws {
-        for await readiness in readinessUpdates {
-            try Task.checkCancellation()
-            guard readiness == .ready else { continue }
-            return
-        }
-        throw Error.streamEndedBeforeModelReady
+        try Task.checkCancellation()
+        let isReady = await InferenceService.waitUntilModelReady(
+            readinessUpdates: readinessUpdates,
+            maxPollCount: maxPollCount,
+            pollIntervalNanoseconds: pollIntervalNanoseconds
+        )
+        try Task.checkCancellation()
+        guard isReady else { throw Error.modelUnavailable }
     }
 
     /// Runs `work` only after the readiness gate completes. Kept as a small

@@ -26,9 +26,10 @@ enum AppIntentsFeature: AppFeature {
     /// Startup stores the App Group envelope here before bootstrap, and
     /// `install(into:)` drains it only after the service publishes `.ready`.
     /// The app's `manifold://ingest` URL handler re-checks the App Group slot
-    /// for every warm invocation; foreground activation is only a fallback.
+    /// for every warm invocation.
     static let pendingPayloadBuffer = PendingPayloadBuffer()
     private static var deliveryTask: Task<Void, Never>?
+    private static var deliveryTaskID: UUID?
     private(set) static var inboundHandoffStatus = "No inbound AppIntent payload staged."
 
     /// Startup-phase hook called as soon as the composition root has created
@@ -53,14 +54,30 @@ enum AppIntentsFeature: AppFeature {
         await stageInboundPayload(InboundAppIntentEnvelopeStore.take())
     }
 
+    /// UI-test-only seed for the warm URL contract. It deliberately writes
+    /// after bootstrap and does not stage the buffer, leaving RootView's
+    /// `.onOpenURL` path as the only way to consume it.
+    static func seedWarmInboundPayloadForUITestIfRequested() {
+        guard let prompt = LaunchArguments.warmAppIntentPrompt else { return }
+        do {
+            try InboundAppIntentEnvelopeStore.write(
+                InboundPayloadEnvelope(prompt: prompt, source: "appIntent")
+            )
+            inboundHandoffStatus = "Warm AppIntent UI-test envelope awaiting URL route."
+        } catch {
+            inboundHandoffStatus = "Warm AppIntent UI-test envelope could not be seeded."
+            Log.ui.error("AppIntentsFeature: failed to seed warm UI-test envelope: \(String(describing: error), privacy: .public)")
+        }
+    }
+
     static func isInboundAppIntentURL(_ url: URL) -> Bool {
         InboundAppIntentRoute.isInboundURL(url)
     }
 
-    /// Drains the App Group slot after an inbound URL event or an activation
-    /// fallback. A warm `openAppWhenRun` invocation does not repeat bootstrap,
-    /// so this is the production handoff that gets its envelope into the
-    /// already-installed readiness delivery loop.
+    /// Drains the App Group slot after the authoritative inbound URL event. A
+    /// warm `openAppWhenRun` invocation does not repeat bootstrap, so this is
+    /// the production handoff that gets its envelope into the already-installed
+    /// readiness delivery loop.
     static func stageAndDeliverInboundPayloadAfterActivation(into env: AppEnvironment) async {
         guard await stageInboundPayload(InboundAppIntentEnvelopeStore.take()) else { return }
         install(into: env)
@@ -92,14 +109,19 @@ enum AppIntentsFeature: AppFeature {
 
     static func install(into env: AppEnvironment) {
         deliveryTask?.cancel()
+        let taskID = UUID()
+        deliveryTaskID = taskID
         let readinessUpdates = env.bootstrap.inferenceService.modelLoadReadinessUpdates()
         deliveryTask = Task { @MainActor in
             defer {
-                if Task.isCancelled == false {
+                if deliveryTaskID == taskID {
                     deliveryTask = nil
+                    deliveryTaskID = nil
                 }
             }
+            guard let generation = await pendingPayloadBuffer.currentGeneration() else { return }
             await pendingPayloadBuffer.deliverWhenModelReady(
+                generation: generation,
                 readinessUpdates: readinessUpdates
             ) { payload in
                 guard !Task.isCancelled else { return }
