@@ -62,12 +62,31 @@ final class StudioLocalModelUITests: XCTestCase {
 
     @MainActor
     private func openModelSwitcher() {
-        let chip = app.descendants(matching: .any)["chat-model-switcher-chip"]
-        XCTAssertTrue(
-            waitForHittable(chip, timeout: 10),
-            "Studio ChatView should expose the host-owned model switcher"
+        let chipQuery = app.descendants(matching: .any).matching(
+            identifier: "chat-model-switcher-chip"
         )
-        chip.tap()
+        if let chip = firstHittable(in: chipQuery, timeout: 3) {
+            chip.tap()
+            return
+        }
+
+        // macOS can move the principal toolbar item into the system More
+        // overflow when the hosted window is crowded. Open that real toolbar
+        // menu, then select the same identified chip from its menu hierarchy.
+        let moreQuery = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS[c] 'More' OR value CONTAINS[c] 'More'")
+        )
+        guard let more = firstHittable(in: moreQuery, timeout: 10) else {
+            XCTFail("Studio ChatView model switcher is neither directly tappable nor reachable through the More toolbar overflow")
+            return
+        }
+        more.tap()
+
+        guard let overflowChip = firstHittable(in: chipQuery, timeout: 5) else {
+            XCTFail("The More toolbar overflow should expose the identified model switcher chip")
+            return
+        }
+        overflowChip.tap()
     }
 
     @MainActor
@@ -156,6 +175,20 @@ final class StudioLocalModelUITests: XCTestCase {
             object: element
         )
         return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+    }
+
+    @MainActor
+    private func firstHittable(in query: XCUIElementQuery, timeout: TimeInterval) -> XCUIElement? {
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                query.allElementsBoundByIndex.contains { $0.exists && $0.isHittable }
+            },
+            object: nil
+        )
+        guard XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed else {
+            return nil
+        }
+        return query.allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable })
     }
 
     @MainActor

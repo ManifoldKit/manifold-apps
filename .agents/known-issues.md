@@ -70,11 +70,12 @@ terminal state. A missing `xcrun --find metallib` result is not an app-build
 preflight; Xcode's package plugins can still compile and bundle the required
 Metal libraries, so the real load is the authoritative check.
 
-## macOS XCUITest hittability can lag element existence after launch
+## macOS can move the model-switcher toolbar chip into More overflow
 
-On a hosted arm64 runner, `chat-model-switcher-chip` can enter the accessibility
-tree while its first `isHittable` snapshot is still false; a model-management
-button in the same app launch can become actionable moments later. Avoid a
-one-shot `waitForExistence(...) && isHittable` assertion before a real tap.
-Use a bounded predicate wait requiring both existence and hittability, without
-adding navigation gestures or other test-side repairs.
+On a hosted arm64 runner, `chat-model-switcher-chip` can exist in the
+accessibility tree but remain non-hittable for the full wait because macOS has
+collapsed the principal toolbar item into the system `More` overflow. A bounded
+existence-and-hittability wait still handles transient launch settling; if the
+chip remains unavailable, open the real `More` toolbar button and select the
+same accessibility-identified chip from its menu hierarchy. Do not resize the
+window, tap coordinates, or add a navigation repair that bypasses the user path.
