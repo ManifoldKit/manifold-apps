@@ -38,12 +38,16 @@ reject a reused build number, so increment `CURRENT_PROJECT_VERSION` before a
 replacement upload while keeping `MARKETING_VERSION` at `0.1.0`.
 
 ```bash
-make testflight-upload DEVELOPMENT_TEAM='<team-id>'
+make testflight-upload \
+  IOS_DESTINATION='platform=iOS Simulator,name=<available-simulator>' \
+  IOS_DEVICE_ID='<device-udid>' \
+  DEVELOPMENT_TEAM='<team-id>'
 ```
 
-This creates the signed archive under the ignored `.artifacts/` directory and
-uploads it with Xcode's authenticated account. Wait for App Store Connect
-processing to finish and assign the build to the internal tester group.
+The supported upload target reruns both test gates before it creates the signed
+archive under the ignored `.artifacts/` directory and uploads it with Xcode's
+authenticated account. Wait for App Store Connect processing to finish and
+assign the build to the internal tester group.
 
 ## Physical-device acceptance
 

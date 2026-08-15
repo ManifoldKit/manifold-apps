@@ -1,4 +1,4 @@
-.PHONY: generate build test device-test archive-ios testflight-upload studio-real-models clean
+.PHONY: generate build test release-inputs device-test archive-ios testflight-upload studio-real-models clean
 
 # Overridable so a host with no "iPhone 16" simulator installed (e.g. an
 # iPhone-17-generation-only Mac) can still `make build`/`make test` locally:
@@ -44,6 +44,10 @@ test: generate
 
 # Physical-device release gate. Pass the device UDID and Apple Developer team:
 #   make device-test IOS_DEVICE_ID=... DEVELOPMENT_TEAM=...
+release-inputs:
+	@test -n '$(IOS_DEVICE_ID)' || (echo 'IOS_DEVICE_ID is required.' >&2; exit 2)
+	@test -n '$(DEVELOPMENT_TEAM)' || (echo 'DEVELOPMENT_TEAM is required.' >&2; exit 2)
+
 device-test: generate
 	@test -n '$(IOS_DEVICE_ID)' || (echo 'IOS_DEVICE_ID is required.' >&2; exit 2)
 	@test -n '$(DEVELOPMENT_TEAM)' || (echo 'DEVELOPMENT_TEAM is required.' >&2; exit 2)
@@ -72,7 +76,10 @@ archive-ios: generate
 		DEVELOPMENT_TEAM='$(DEVELOPMENT_TEAM)' \
 		CODE_SIGN_STYLE=Automatic
 
-testflight-upload: archive-ios
+# The supported upload path is deliberately expensive and fail-closed: a
+# TestFlight upload must follow both the simulator/macOS suite and signed
+# physical-device suite in the same invocation.
+testflight-upload: release-inputs test device-test archive-ios
 	xcodebuild -exportArchive \
 		-archivePath '$(ARCHIVE_PATH)' \
 		-exportOptionsPlist '$(EXPORT_OPTIONS_PLIST)' \
