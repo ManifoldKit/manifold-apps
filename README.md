@@ -22,8 +22,15 @@ Both targets consume ManifoldKit by published tag (`upToNextMinor`, see
 brew install xcodegen   # once, if you don't already have it
 make generate            # xcodegen generate -> Manifold.xcodeproj (gitignored)
 make build                # builds both schemes (iOS Simulator + macOS)
-make test                  # runs ManifoldUITests (4 smoke tests) against the Manifold scheme
+make test                 # runs the complete iOS + Studio UI-test targets
 ```
 
 See `AGENTS.md` for the full set of repo-specific conventions and
 constraints.
+
+## TestFlight releases
+
+Manifold `0.1.0` is an internal TestFlight release, not a public App Store
+launch. The signed archive, upload, physical-device gate, and acceptance
+checklist are documented in [`RELEASE.md`](RELEASE.md). A `0.1.0` tag is cut
+only after the uploaded build passes that real-device checklist.
