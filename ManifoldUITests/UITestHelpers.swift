@@ -250,6 +250,19 @@ extension XCTestCase {
         return conversation.value as? String
     }
 
+    func waitForChatTurnValue(
+        _ expectedValue: String,
+        app: XCUIApplication,
+        timeout: TimeInterval
+    ) -> Bool {
+        let conversation = app.otherElements["chat-conversation"]
+        guard conversation.waitForExistence(timeout: 5) else { return false }
+
+        let predicate = NSPredicate(format: "value == %@", expectedValue)
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: conversation)
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+    }
+
     // MARK: - Sheet Dismissal
 
     /// Dismisses a presented sheet by tapping the "Done" button if it exists,

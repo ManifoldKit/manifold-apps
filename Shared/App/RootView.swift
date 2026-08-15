@@ -311,11 +311,18 @@ struct RootView: View {
         case .idle:
             "Idle"
         case .generating:
-            "Generating response"
+            env.viewModel.isGenerating ? "Generating response" : "Idle"
         case .completed(let message):
-            "Response complete: \(message.content)"
+            if message.sessionID == env.viewModel.activeSession?.id {
+                "Response complete: \(message.content)"
+            } else {
+                "Idle"
+            }
         case .failed:
-            "Response failed"
+            // TurnState does not carry a session ID for failures. ChatView's
+            // error surface already exposes the active failure; never risk
+            // announcing a prior session's error on the new conversation.
+            "Idle"
         }
     }
 
