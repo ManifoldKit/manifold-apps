@@ -31,6 +31,7 @@ build: generate
 		CODE_SIGNING_ALLOWED=NO
 
 test: generate
+	bash ./scripts/test-ios-device.sh --self-test
 	xcodebuild test \
 		-project Manifold.xcodeproj \
 		-scheme Manifold \
@@ -51,26 +52,7 @@ release-inputs:
 device-test: generate
 	@test -n '$(IOS_DEVICE_ID)' || (echo 'IOS_DEVICE_ID is required.' >&2; exit 2)
 	@test -n '$(DEVELOPMENT_TEAM)' || (echo 'DEVELOPMENT_TEAM is required.' >&2; exit 2)
-	xcodebuild test \
-		-project Manifold.xcodeproj \
-		-scheme Manifold \
-		-destination 'platform=iOS,id=$(IOS_DEVICE_ID)' \
-		-skip-testing:ManifoldUITests/FoundationDeviceUITests \
-		-skipPackagePluginValidation \
-		-allowProvisioningUpdates \
-		-allowProvisioningDeviceRegistration \
-		DEVELOPMENT_TEAM='$(DEVELOPMENT_TEAM)' \
-		CODE_SIGN_STYLE=Automatic
-	xcodebuild test \
-		-project Manifold.xcodeproj \
-		-scheme Manifold \
-		-destination 'platform=iOS,id=$(IOS_DEVICE_ID)' \
-		-only-testing:ManifoldUITests/FoundationDeviceUITests \
-		-skipPackagePluginValidation \
-		-allowProvisioningUpdates \
-		-allowProvisioningDeviceRegistration \
-		DEVELOPMENT_TEAM='$(DEVELOPMENT_TEAM)' \
-		CODE_SIGN_STYLE=Automatic
+	bash ./scripts/test-ios-device.sh '$(IOS_DEVICE_ID)' '$(DEVELOPMENT_TEAM)'
 
 # Signed archive used for TestFlight. Artifacts stay under the ignored
 # .artifacts directory; credentials remain in Xcode/Keychain, never the repo.

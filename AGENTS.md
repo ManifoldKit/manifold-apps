@@ -29,6 +29,7 @@ covers only what's specific to manifold-apps.
 make generate   # xcodegen generate
 make build      # builds both schemes (iOS Simulator + macOS), CODE_SIGNING_ALLOWED=NO
 make test       # runs the complete Manifold + ManifoldStudio UI-test targets
+make device-test IOS_DEVICE_ID=... DEVELOPMENT_TEAM=... # sharded physical iOS gate
 make clean      # removes the generated project + build artifacts
 ```
 
@@ -40,6 +41,13 @@ ManifoldKit's `scripts/clean-build.sh` history, #2475).
 but is overridable for hosts without that simulator installed (e.g. an
 iPhone-17-generation-only Mac): `make test IOS_DESTINATION='platform=iOS
 Simulator,name=iPhone 17 Pro'`.
+
+The physical gate builds once, enumerates the exact built test bundle, runs
+in-process tests together, then gives every app-launching UI test a fresh
+`xcodebuild` runner before the final isolated real-Foundation turn. Do not
+collapse those shards into one test operation: Xcode 27 beta can stop
+delivering device input after repeated launches while retaining a plausible
+accessibility hierarchy.
 
 ## Constraints specific to this repo
 

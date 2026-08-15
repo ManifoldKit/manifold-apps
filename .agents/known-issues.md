@@ -54,8 +54,13 @@ synthesized tap or text-entry event is ignored. Both XCTest screen recordings
 and `devicectl device capture screenshot` are black (sometimes with a spinner),
 even though `devicectl` reports the device connected, paired, unlocked,
 Developer Mode enabled, and the backlight active. Restarting CoreDeviceService
-restores enumeration but not display capture or input. Treat the simultaneous
-black capture + visible accessibility tree as a device-runner failure, not an
+restores enumeration but not display capture or input. A full-suite retry after
+a reboot can pass its first app launch and then degrade again on later launches;
+an isolated test can pass immediately beforehand. The physical gate therefore
+builds once and runs each app-launching test through a fresh `xcodebuild`
+operation, while its enumeration check keeps every built test covered. Treat
+the simultaneous black capture + visible accessibility tree as a device-runner
+failure, not an
 app-layout verdict; reconnect/restart Xcode and the iPad before rerunning the
 physical gate. A previously completed real Foundation turn remains valid
 evidence for the app path, but never use it to waive the final fresh device
