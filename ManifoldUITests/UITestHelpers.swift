@@ -231,6 +231,25 @@ extension XCTestCase {
         element.waitForExistence(timeout: timeout)
     }
 
+    /// Waits for the app-owned chat container to report a completed turn and
+    /// returns its accessibility value. This avoids relying on lazy message
+    /// bubble descendants, which iOS 27 can omit from XCUI's remote snapshot
+    /// even while those bubbles are visibly rendered.
+    func waitForCompletedChatTurn(
+        app: XCUIApplication,
+        timeout: TimeInterval
+    ) -> String? {
+        let conversation = app.otherElements["chat-conversation"]
+        guard conversation.waitForExistence(timeout: 5) else { return nil }
+
+        let completed = NSPredicate(format: "value BEGINSWITH 'Response complete:'")
+        let expectation = XCTNSPredicateExpectation(predicate: completed, object: conversation)
+        guard XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed else {
+            return nil
+        }
+        return conversation.value as? String
+    }
+
     // MARK: - Sheet Dismissal
 
     /// Dismisses a presented sheet by tapping the "Done" button if it exists,

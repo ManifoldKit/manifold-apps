@@ -74,16 +74,13 @@ final class SmokeUITests: XCTestCase {
 
         sendButton.tap()
 
-        // MessageBubbleView combines its content with
-        // `accessibilityElement(.combine)` and exposes a "User said: <content>"
-        // label on the wrapping element, which macOS exposes as an
-        // `otherElement` rather than a `staticText`.
-        let predicate = NSPredicate(format: "label CONTAINS[c] 'Hello from UI test'")
-        let userMessage = app.descendants(matching: .any).matching(predicate).firstMatch
-
-        let messageAppeared = waitForElement(userMessage, timeout: 5)
+        let completion = waitForCompletedChatTurn(app: app, timeout: 10)
         captureScreenshot(name: "Send-Flow-After-Send")
-        XCTAssertTrue(messageAppeared, "User message should appear in the chat after sending")
+        XCTAssertEqual(
+            completion,
+            "Response complete: Hello from the scripted UI-test backend.",
+            "Sending must complete a real scripted turn and surface the assistant response"
+        )
     }
 
     // MARK: - ModelSwitcherChipUITests.testSwitcherChipReachableAndOpensSwitcherOnCompactWidth
