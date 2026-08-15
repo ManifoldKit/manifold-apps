@@ -1,0 +1,67 @@
+import XCTest
+
+/// Physical-device release coverage for the production Foundation Models
+/// bootstrap. Unlike the ordinary UI suite, this test never substitutes a
+/// scripted backend: a fresh store must discover, load, and generate through
+/// the OS-resident model before the build is eligible for TestFlight.
+final class FoundationDeviceUITests: XCTestCase {
+    @MainActor
+    func testFreshInstallLoadsFoundationAndCompletesRealTurn() throws {
+        #if targetEnvironment(simulator)
+        throw XCTSkip("Real Foundation Models validation requires a physical iOS device.")
+        #else
+        continueAfterFailure = false
+        let app = launchApp(additionalArguments: ["--ios-real-foundation-test"])
+        openChatDetailIfNeeded(app: app)
+
+        XCTAssertTrue(
+            waitForChatInputReady(app: app, timeout: 120),
+            "Production bootstrap must load Foundation Models on this release device; a scripted backend is forbidden in this gate."
+        )
+
+        let assistantBubbles = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label BEGINSWITH 'Assistant said:'")
+        )
+        let assistantCountBefore = assistantBubbles.count
+
+        guard let input = findMessageInput(app: app) else {
+            XCTFail("Message input must be available after Foundation loads.")
+            return
+        }
+        input.tap()
+        input.typeText("Reply with a short greeting. Do not use tools.")
+
+        let sendButton = app.buttons["Send message"]
+        XCTAssertTrue(
+            sendButton.waitForExistence(timeout: 5) && sendButton.isEnabled,
+            "Send must become available after entering the real-device prompt."
+        )
+        sendButton.tap()
+
+        let assistantPrefix = "Assistant said:"
+        let deadline = Date().addingTimeInterval(180)
+        var newestLabel = ""
+        while Date() < deadline {
+            if assistantBubbles.count > assistantCountBefore {
+                newestLabel = assistantBubbles.allElementsBoundByIndex.last?.label ?? ""
+                if newestLabel.trimmingCharacters(in: .whitespacesAndNewlines).count
+                    > assistantPrefix.count {
+                    break
+                }
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+        }
+
+        XCTAssertGreaterThan(
+            assistantBubbles.count,
+            assistantCountBefore,
+            "A real Foundation turn must append a non-empty assistant response."
+        )
+        XCTAssertGreaterThan(
+            newestLabel.trimmingCharacters(in: .whitespacesAndNewlines).count,
+            assistantPrefix.count,
+            "The live Foundation response must contain generated text."
+        )
+        #endif
+    }
+}

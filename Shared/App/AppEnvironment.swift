@@ -2,10 +2,8 @@ import Foundation
 import SwiftData
 import ManifoldKit
 import ManifoldTools
-#if os(macOS)
 import ManifoldMLX
 import ManifoldLlama
-#endif
 
 /// The composition root shared by `Manifold` (iOS) and `ManifoldStudio`
 /// (macOS): owns the bootstrapped ManifoldKit stack (inference, persistence,
@@ -92,6 +90,7 @@ final class AppEnvironment {
     ) async throws -> AppEnvironment {
         let isUITesting = LaunchArguments.isUITesting
         let runsStudioRealModelTest = LaunchArguments.runsStudioRealModelTest
+        let runsIOSRealFoundationTest = LaunchArguments.runsIOSRealFoundationTest
         let usesEphemeralStore = isUITesting || runsStudioRealModelTest
         let configuration = ManifoldConfiguration(appName: appName, bundleIdentifier: bundleIdentifier)
 
@@ -115,7 +114,8 @@ final class AppEnvironment {
         let inferenceService: InferenceService
         if isUITesting
             && !LaunchArguments.runsStudioLocalModelTest
-            && !runsStudioRealModelTest {
+            && !runsStudioRealModelTest
+            && !runsIOSRealFoundationTest {
             let backend: any InferenceBackend
             let backendName: String
             if LaunchArguments.runsToolApprovalFlow {
@@ -171,7 +171,8 @@ final class AppEnvironment {
 
         if !isUITesting
             || LaunchArguments.runsStudioLocalModelTest
-            || runsStudioRealModelTest {
+            || runsStudioRealModelTest
+            || runsIOSRealFoundationTest {
             OllamaBackends.register(with: inferenceService)
             CloudSaaSBackends.register(with: inferenceService)
             FoundationBackends.register(with: inferenceService)
@@ -192,9 +193,9 @@ final class AppEnvironment {
                     }
                 }
             }
+            #endif
             MLXBackends.register(with: inferenceService)
             LlamaBackends.register(with: inferenceService)
-            #endif
         }
 
         let viewModel = ChatViewModel(
@@ -203,6 +204,18 @@ final class AppEnvironment {
             conversationRuntime: bootstrap.conversationRuntime
         )
         viewModel.configure(bootstrap: bootstrap)
+
+        // Manual bootstrap does not seed the OS-resident Foundation model.
+        // Without this provider the registry cannot discover Foundation at
+        // all, even on a supported device with Apple Intelligence enabled.
+        #if canImport(FoundationModels)
+        if (!isUITesting || runsStudioRealModelTest || runsIOSRealFoundationTest),
+           #available(macOS 26, iOS 26, *) {
+            viewModel.modelRegistry.foundationModelProvider = {
+                FoundationBackend.isAvailable
+            }
+        }
+        #endif
 
         if runsStudioRealModelTest {
             // The hardware gate validates the two paths before launch and
@@ -267,7 +280,7 @@ final class AppEnvironment {
             }
         }
 
-        if !isUITesting {
+        if !isUITesting || runsIOSRealFoundationTest {
             // ModelInfo discovery parses GGUF metadata and sizes MLX trees.
             // ModelRegistry's async API performs that filesystem work away
             // from the main actor so a real local catalogue cannot freeze the
@@ -287,6 +300,12 @@ final class AppEnvironment {
                 await viewModel.loadSelectedEndpoint()
             } else if viewModel.selectedModel != nil {
                 await viewModel.loadSelectedModel()
+            } else {
+                // `autoSelectFirstRunModel()` is deliberately one-shot. A
+                // previous broken launch may already have consumed its flag,
+                // so explicitly retry Foundation when no persisted selection
+                // was restored.
+                viewModel.loadFoundationModelIfAvailable()
             }
         }
 

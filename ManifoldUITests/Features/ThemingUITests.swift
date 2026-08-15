@@ -61,17 +61,15 @@ final class ThemingUITests: XCTestCase {
         )
 
         showSidebarIfNeeded(app: app)
-        let selectedThemingRow = app.buttons["feature-sidebar-row-theming"]
+        let selectedThemingRow = featureSidebarRow("theming", app: app)
         XCTAssertTrue(
             waitForElement(selectedThemingRow, timeout: 5) && selectedThemingRow.isSelected,
             "Reopened compact sidebar should expose Theming as the selected feature"
         )
-        let cloudRow = app.buttons["feature-sidebar-row-cloud"]
         XCTAssertTrue(
-            waitForElement(cloudRow, timeout: 5) && cloudRow.isHittable,
-            "Sidebar should expose a tappable Cloud button"
+            tapFeatureSidebarRow("cloud", app: app),
+            "Sidebar should expose a selectable Cloud row"
         )
-        cloudRow.tap()
 
         navigateToTheming()
 
@@ -95,25 +93,10 @@ final class ThemingUITests: XCTestCase {
     /// "Theming" feature row to select `ThemingFeature` in `RootView`'s
     /// `NavigationSplitView` detail column.
     private func navigateToTheming() {
-        showSidebarIfNeeded(app: app)
-
-        let featureList = app.descendants(matching: .any)["feature-sidebar-list"]
         XCTAssertTrue(
-            waitForElement(featureList, timeout: 2),
-            "Sidebar should expose the identified feature list"
+            tapFeatureSidebarRow("theming", app: app),
+            "Theming row should become selectable after bounded feature-list scrolling"
         )
-
-        let row = app.buttons["feature-sidebar-row-theming"]
-
-        for _ in 0..<4 where !row.exists || !row.isHittable {
-            featureList.swipeUp()
-        }
-        XCTAssertTrue(
-            row.exists && row.isHittable,
-            "Theming button should become hittable after bounded feature-list scrolling; "
-                + "list=\(featureList.frame), row=\(row.frame)"
-        )
-        row.tap()
 
         let readout = app.descendants(matching: .any)["theming-corner-radius-label"]
         XCTAssertTrue(

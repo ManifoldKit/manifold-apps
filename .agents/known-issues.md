@@ -27,7 +27,7 @@ title, New Chat button, or a row with the explicit `session-row` identifier;
 keep the generic-cell fallback only for lookup after the sidebar is known to
 be visible.
 
-## Compact feature navigation must avoid sibling `List` hit-routing
+## Feature navigation needs different compact and regular-width semantics
 
 On a compact iPhone 16, the sidebar's sibling `SessionListView` and feature
 `List` can report a lower feature button as existing and hittable, synthesize
@@ -36,11 +36,30 @@ fifth-row Theming fails, and an artificial pre-tap list scroll makes Theming
 pass, proving the stacked-list hit-routing/position is causal rather than the
 detail transition. Render the iOS feature region as a `ScrollView` with a
 `LazyVStack` of full-width plain `Button`s that synchronously select the
-feature and reassert the detail column. Keep stable
-`feature-sidebar-row-<id>` identifiers inside `feature-sidebar-list`, and keep
-macOS's native `List(selection:)` + tags. UI tests should target the identified
-buttons, use only bounded pre-activation scrolling when a row is genuinely
-not hittable, then assert the app-owned detail directly.
+feature and reassert the detail column on compact widths. On regular-width
+iPad, keep a native `List(selection:)`: replacing it with those explicit
+buttons puts the visible feature rows below NavigationSplitView's detail
+hit-testing layer, so taps synthesize without changing selection. Keep stable
+`feature-sidebar-row-<id>` identifiers inside `feature-sidebar-list` on both
+paths. UI tests must query identified descendants without constraining the
+element type (iPad exposes the native row as a cell/combined label, not a
+button), use a center-coordinate tap only when the native row reports a real
+frame but `isHittable == false`, and assert the app-owned detail directly.
+
+## Xcode 27 beta can leave physical-device UI automation on a black screen
+
+On an iPad running iOS 27 beta, Xcode 27 beta UI tests can still install and
+launch Manifold and expose its complete accessibility hierarchy while every
+synthesized tap or text-entry event is ignored. Both XCTest screen recordings
+and `devicectl device capture screenshot` are black (sometimes with a spinner),
+even though `devicectl` reports the device connected, paired, unlocked,
+Developer Mode enabled, and the backlight active. Restarting CoreDeviceService
+restores enumeration but not display capture or input. Treat the simultaneous
+black capture + visible accessibility tree as a device-runner failure, not an
+app-layout verdict; reconnect/restart Xcode and the iPad before rerunning the
+physical gate. A previously completed real Foundation turn remains valid
+evidence for the app path, but never use it to waive the final fresh device
+gate for a release candidate.
 
 ## Ad-hoc simulator UI tests cannot prove App Group sharing cross-process
 

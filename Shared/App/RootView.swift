@@ -215,15 +215,21 @@ struct RootView: View {
             }
             .accessibilityIdentifier("feature-sidebar-list")
         } else {
+            // Preserve NavigationSplitView's native regular-width selection
+            // semantics. A button-based ScrollView is visually correct but
+            // sits beneath the split view's detail hit-testing layer on iPad.
             List(selection: $selectedFeatureID) {
                 Label("Chat", systemImage: "bubble.left.and.bubble.right")
                     .tag("chat")
+                    .accessibilityIdentifier("feature-sidebar-row-chat")
 
                 ForEach(features) { entry in
                     Label(entry.title, systemImage: entry.systemImage)
                         .tag(entry.id)
+                        .accessibilityIdentifier("feature-sidebar-row-\(entry.id)")
                 }
             }
+            .accessibilityIdentifier("feature-sidebar-list")
         }
         #else
         // Keep the native selection affordance on macOS. On compact iPhones,
@@ -256,6 +262,7 @@ struct RootView: View {
         .accessibilityAddTraits(selectedFeatureID == id ? .isSelected : [])
         .accessibilityIdentifier("feature-sidebar-row-\(id)")
     }
+
     #endif
 
     private func selectFeature(_ id: String) {

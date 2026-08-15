@@ -117,13 +117,10 @@ final class ToolsUITests: XCTestCase {
     }
 
     private func navigateToTools() {
-        showSidebarIfNeeded(app: app)
-        let row = app.buttons["feature-sidebar-row-tools"]
         XCTAssertTrue(
-            row.waitForExistence(timeout: 5) && row.isHittable,
-            "Sidebar should expose a tappable Tools button"
+            tapFeatureSidebarRow("tools", app: app),
+            "Sidebar should expose a selectable Tools row"
         )
-        row.tap()
         XCTAssertTrue(
             app.descendants(matching: .any)["tools-browser"].waitForExistence(timeout: 5),
             "Selecting Tools should open the live registry browser"
@@ -131,13 +128,10 @@ final class ToolsUITests: XCTestCase {
     }
 
     private func navigateToChat() {
-        showSidebarIfNeeded(app: app)
-        let row = app.buttons["feature-sidebar-row-chat"]
         XCTAssertTrue(
-            row.waitForExistence(timeout: 5) && row.isHittable,
-            "Sidebar should expose a tappable Chat button"
+            tapFeatureSidebarRow("chat", app: app),
+            "Sidebar should expose a selectable Chat row"
         )
-        row.tap()
         XCTAssertTrue(
             waitForChatInputReady(app: app, timeout: 30),
             "Selecting Chat should restore the live chat detail"

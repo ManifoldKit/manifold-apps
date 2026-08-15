@@ -143,12 +143,10 @@ final class SmokeUITests: XCTestCase {
             return
         }
 
-        let toolsRow = app.buttons["feature-sidebar-row-tools"]
         XCTAssertTrue(
-            waitForElement(toolsRow, timeout: 5) && toolsRow.isHittable,
-            "Sidebar should expose a tappable Tools button"
+            tapFeatureSidebarRow("tools", app: app),
+            "Sidebar should expose a selectable Tools row"
         )
-        toolsRow.tap()
         XCTAssertTrue(
             app.descendants(matching: .any)["tools-browser"].waitForExistence(timeout: 5),
             "Selecting Tools should replace the chat detail before the session switch"

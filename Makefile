@@ -55,6 +55,17 @@ device-test: generate
 		-project Manifold.xcodeproj \
 		-scheme Manifold \
 		-destination 'platform=iOS,id=$(IOS_DEVICE_ID)' \
+		-skip-testing:ManifoldUITests/FoundationDeviceUITests \
+		-skipPackagePluginValidation \
+		-allowProvisioningUpdates \
+		-allowProvisioningDeviceRegistration \
+		DEVELOPMENT_TEAM='$(DEVELOPMENT_TEAM)' \
+		CODE_SIGN_STYLE=Automatic
+	xcodebuild test \
+		-project Manifold.xcodeproj \
+		-scheme Manifold \
+		-destination 'platform=iOS,id=$(IOS_DEVICE_ID)' \
+		-only-testing:ManifoldUITests/FoundationDeviceUITests \
 		-skipPackagePluginValidation \
 		-allowProvisioningUpdates \
 		-allowProvisioningDeviceRegistration \

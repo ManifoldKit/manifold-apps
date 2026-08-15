@@ -77,6 +77,44 @@ extension XCTestCase {
             || identifiedSessionRow(app: app).waitForExistence(timeout: timeout)
     }
 
+    /// Returns the feature row across both iPhone's explicit Button list and
+    /// iPad's native selection List. SwiftUI exposes the latter as a cell or
+    /// combined label rather than a Button, so callers must not constrain the
+    /// XCUI element type.
+    func featureSidebarRow(_ featureID: String, app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier == %@", "feature-sidebar-row-\(featureID)")
+        ).firstMatch
+    }
+
+    /// Reveals and selects a feature row. Coordinate tapping is an intentional
+    /// fallback for iPadOS NavigationSplitView: a native List row can report
+    /// `isHittable == false` even though its selection hit region is live.
+    @discardableResult
+    func tapFeatureSidebarRow(
+        _ featureID: String,
+        app: XCUIApplication,
+        maximumScrolls: Int = 4
+    ) -> Bool {
+        showSidebarIfNeeded(app: app)
+
+        let featureList = app.descendants(matching: .any)["feature-sidebar-list"]
+        guard featureList.waitForExistence(timeout: 2) else { return false }
+
+        let row = featureSidebarRow(featureID, app: app)
+        for _ in 0..<maximumScrolls where !row.exists || row.frame.isEmpty {
+            featureList.swipeUp()
+        }
+        guard row.waitForExistence(timeout: 5), !row.frame.isEmpty else { return false }
+
+        if row.isHittable {
+            row.tap()
+        } else {
+            row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        }
+        return true
+    }
+
     // MARK: - Chat Detail
 
     /// On compact layouts, the app may launch with the session list visible first.
