@@ -27,6 +27,14 @@ enum LaunchArguments {
         CommandLine.arguments.contains("--studio-real-model-test")
     }
 
+    /// Enables the physical-iOS Foundation Models release gate. The launch
+    /// remains under `--uitesting` for an isolated SwiftData store, but must
+    /// use the production inference service and backend registration rather
+    /// than the deterministic `ScriptedBackend`.
+    static var runsIOSRealFoundationTest: Bool {
+        isUITesting && CommandLine.arguments.contains("--ios-real-foundation-test")
+    }
+
     /// The installed MLX directory exercised by the Studio hardware gate.
     /// The shell gate passes this through explicitly, while the default keeps
     /// the one-command local workflow useful on the maintainer's machine.

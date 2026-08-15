@@ -39,6 +39,10 @@ targets:
         product: ManifoldUIModelManagement
       - package: ManifoldKit
         product: ManifoldAppIntents
+      - package: ManifoldMLX
+        product: ManifoldMLX
+      - package: ManifoldLlama
+        product: ManifoldLlama
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.manifoldkit.Manifold

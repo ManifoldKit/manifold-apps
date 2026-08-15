@@ -873,23 +873,10 @@ final class AppIntentsUITests: XCTestCase {
     }
 
     private func tapFeatureSidebarButton(_ featureID: String, in app: XCUIApplication) {
-        showSidebarIfNeeded(app: app)
-
-        let featureList = app.descendants(matching: .any)["feature-sidebar-list"]
         XCTAssertTrue(
-            waitForElement(featureList, timeout: 2),
-            "Sidebar should expose the identified feature list"
+            tapFeatureSidebarRow(featureID, app: app),
+            "Sidebar should expose a selectable \(featureID) feature row"
         )
-
-        let row = app.buttons["feature-sidebar-row-\(featureID)"]
-        for _ in 0..<4 where !row.exists || !row.isHittable {
-            featureList.swipeUp()
-        }
-        XCTAssertTrue(
-            row.exists && row.isHittable,
-            "Sidebar should expose a tappable \(featureID) feature button"
-        )
-        row.tap()
     }
 
     private func makeIsolatedEnvelopeDefaults() -> UserDefaults? {

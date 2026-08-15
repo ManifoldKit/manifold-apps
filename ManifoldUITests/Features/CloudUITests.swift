@@ -140,14 +140,10 @@ final class CloudUITests: XCTestCase {
         // Leaving Cloud causes RootView to refresh ChatViewModel's public
         // endpoint list from the store. The resulting row is the proof that
         // persistence is connected to the chat surface, not only to this form.
-        showSidebarIfNeeded(app: app)
-        let chatRow = app.buttons["feature-sidebar-row-chat"]
         XCTAssertTrue(
-            chatRow.waitForExistence(timeout: 5),
-            "Sidebar should expose an explicit route back to ChatView"
+            tapFeatureSidebarRow("chat", app: app),
+            "Sidebar should expose an explicit selectable route back to ChatView"
         )
-        XCTAssertTrue(chatRow.isHittable, "Chat sidebar button should be directly tappable")
-        chatRow.tap()
 
         let chip = app.descendants(matching: .any)["chat-model-switcher-chip"]
         XCTAssertTrue(chip.waitForExistence(timeout: 5) && chip.isHittable, "Chat should expose its model switcher")
@@ -194,16 +190,11 @@ final class CloudUITests: XCTestCase {
 
     /// Navigates from the sidebar to the Cloud feature's `APIConfigurationView`.
     private func navigateToCloudFeature() {
-        showSidebarIfNeeded(app: app)
-
-        let cloudRow = app.buttons["feature-sidebar-row-cloud"]
-
-        guard waitForElement(cloudRow, timeout: 5) else {
+        guard tapFeatureSidebarRow("cloud", app: app) else {
             captureScreenshot(name: "Cloud-Nav-Row-Not-Found")
-            XCTFail("Cloud sidebar row not found")
+            XCTFail("Cloud sidebar row not found or selectable")
             return
         }
-        cloudRow.tap()
 
         let apiTitle = app.descendants(matching: .any)
             .matching(NSPredicate(format: "label == 'Cloud APIs' OR value == 'Cloud APIs'"))
