@@ -1,4 +1,4 @@
-.PHONY: generate build test studio-real-models clean
+.PHONY: generate build test device-test archive-ios testflight-upload studio-real-models clean
 
 # Overridable so a host with no "iPhone 16" simulator installed (e.g. an
 # iPhone-17-generation-only Mac) can still `make build`/`make test` locally:
@@ -6,6 +6,8 @@
 # Default stays iPhone 16 so CI behavior (ci.yml, which hardcodes the same
 # default via the reusable workflow) is unchanged.
 IOS_DESTINATION ?= platform=iOS Simulator,name=iPhone 16
+ARCHIVE_PATH ?= $(CURDIR)/.artifacts/Manifold.xcarchive
+EXPORT_OPTIONS_PLIST ?= $(CURDIR)/Release/TestFlightExportOptions.plist
 
 generate:
 	xcodegen generate
@@ -40,10 +42,46 @@ test: generate
 		-destination 'platform=macOS' \
 		-skipPackagePluginValidation
 
+# Physical-device release gate. Pass the device UDID and Apple Developer team:
+#   make device-test IOS_DEVICE_ID=... DEVELOPMENT_TEAM=...
+device-test: generate
+	@test -n '$(IOS_DEVICE_ID)' || (echo 'IOS_DEVICE_ID is required.' >&2; exit 2)
+	@test -n '$(DEVELOPMENT_TEAM)' || (echo 'DEVELOPMENT_TEAM is required.' >&2; exit 2)
+	xcodebuild test \
+		-project Manifold.xcodeproj \
+		-scheme Manifold \
+		-destination 'platform=iOS,id=$(IOS_DEVICE_ID)' \
+		-skipPackagePluginValidation \
+		-allowProvisioningUpdates \
+		-allowProvisioningDeviceRegistration \
+		DEVELOPMENT_TEAM='$(DEVELOPMENT_TEAM)' \
+		CODE_SIGN_STYLE=Automatic
+
+# Signed archive used for TestFlight. Artifacts stay under the ignored
+# .artifacts directory; credentials remain in Xcode/Keychain, never the repo.
+archive-ios: generate
+	@test -n '$(DEVELOPMENT_TEAM)' || (echo 'DEVELOPMENT_TEAM is required.' >&2; exit 2)
+	@mkdir -p '$(dir $(ARCHIVE_PATH))'
+	xcodebuild archive \
+		-project Manifold.xcodeproj \
+		-scheme Manifold \
+		-destination 'generic/platform=iOS' \
+		-archivePath '$(ARCHIVE_PATH)' \
+		-skipPackagePluginValidation \
+		-allowProvisioningUpdates \
+		DEVELOPMENT_TEAM='$(DEVELOPMENT_TEAM)' \
+		CODE_SIGN_STYLE=Automatic
+
+testflight-upload: archive-ios
+	xcodebuild -exportArchive \
+		-archivePath '$(ARCHIVE_PATH)' \
+		-exportOptionsPlist '$(EXPORT_OPTIONS_PLIST)' \
+		-allowProvisioningUpdates
+
 # Opt-in physical-hardware regression gate. The script validates the machine
 # and installed model assets before invoking the complete Studio UI-test target.
 studio-real-models:
 	bash ./scripts/test-studio-real-models.sh
 
 clean:
-	rm -rf Manifold.xcodeproj DerivedData .build
+	rm -rf Manifold.xcodeproj DerivedData .build .artifacts

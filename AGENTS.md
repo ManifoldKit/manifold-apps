@@ -28,7 +28,7 @@ covers only what's specific to manifold-apps.
 ```bash
 make generate   # xcodegen generate
 make build      # builds both schemes (iOS Simulator + macOS), CODE_SIGNING_ALLOWED=NO
-make test       # runs ManifoldUITests (4 smoke tests) against the Manifold scheme
+make test       # runs the complete Manifold + ManifoldStudio UI-test targets
 make clean      # removes the generated project + build artifacts
 ```
 
