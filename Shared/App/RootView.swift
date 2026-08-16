@@ -293,6 +293,36 @@ struct RootView: View {
                     APIConfigurationView()
                         .environment(\.endpointStore, env.bootstrap.endpointStore)
                 }
+                // Keep one stable, app-owned accessibility container around
+                // the conversation. iOS 27 can temporarily omit SwiftUI's
+                // lazy message-bubble descendants from XCUI queries even
+                // after they are visibly rendered; this value reflects the
+                // runtime's atomic turn outcome instead of presentation
+                // timing, and gives VoiceOver a concise conversation status.
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel("Chat conversation")
+                .accessibilityValue(chatTurnAccessibilityValue)
+                .accessibilityIdentifier("chat-conversation")
+        }
+    }
+
+    private var chatTurnAccessibilityValue: String {
+        switch env.viewModel.lastTurnState {
+        case .idle:
+            "Idle"
+        case .generating:
+            env.viewModel.isGenerating ? "Generating response" : "Idle"
+        case .completed(let message):
+            if message.sessionID == env.viewModel.activeSession?.id {
+                "Response complete: \(message.content)"
+            } else {
+                "Idle"
+            }
+        case .failed:
+            // TurnState does not carry a session ID for failures. ChatView's
+            // error surface already exposes the active failure; never risk
+            // announcing a prior session's error on the new conversation.
+            "Idle"
         }
     }
 

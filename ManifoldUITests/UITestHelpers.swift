@@ -19,15 +19,33 @@ extension XCTestCase {
         let app = XCUIApplication()
         app.launchArguments += ["--uitesting"]
         app.launchArguments += additionalArguments
-        #if !os(macOS)
         app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
-        #endif
         app.launch()
         #if os(macOS)
-        app.activate()
+        // XCUIApplication termination can persist an intentional "all windows
+        // closed" state even when ApplePersistenceIgnoreState is set. A later
+        // test launch then owns the menu bar but has no window or app content.
+        // Reopen the WindowGroup explicitly so each test starts from a visible,
+        // independently reachable production surface.
+        if !app.windows.firstMatch.waitForExistence(timeout: 2) {
+            app.typeKey("n", modifierFlags: .command)
+        }
+        XCTAssertTrue(
+            app.windows.firstMatch.waitForExistence(timeout: 5),
+            "App should present a window under macOS UI tests",
+            file: file,
+            line: line
+        )
+        // A GUI host that launched xcodebuild can remain frontmost even after
+        // `activate()`. Click the tested window's title region directly: the
+        // coordinate event is valid while its descendants are non-hittable,
+        // and makes subsequent control interactions deterministic.
+        app.windows.firstMatch
+            .coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.05))
+            .tap()
         XCTAssertTrue(
             app.wait(for: .runningForeground, timeout: 5),
-            "App should reach the foreground under macOS UI tests",
+            "App should reach the foreground after focusing its window",
             file: file,
             line: line
         )
@@ -229,6 +247,38 @@ extension XCTestCase {
     @discardableResult
     func waitForElement(_ element: XCUIElement, timeout: TimeInterval = 5) -> Bool {
         element.waitForExistence(timeout: timeout)
+    }
+
+    /// Waits for the app-owned chat container to report a completed turn and
+    /// returns its accessibility value. This avoids relying on lazy message
+    /// bubble descendants, which iOS 27 can omit from XCUI's remote snapshot
+    /// even while those bubbles are visibly rendered.
+    func waitForCompletedChatTurn(
+        app: XCUIApplication,
+        timeout: TimeInterval
+    ) -> String? {
+        let conversation = app.otherElements["chat-conversation"]
+        guard conversation.waitForExistence(timeout: 5) else { return nil }
+
+        let completed = NSPredicate(format: "value BEGINSWITH 'Response complete:'")
+        let expectation = XCTNSPredicateExpectation(predicate: completed, object: conversation)
+        guard XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed else {
+            return nil
+        }
+        return conversation.value as? String
+    }
+
+    func waitForChatTurnValue(
+        _ expectedValue: String,
+        app: XCUIApplication,
+        timeout: TimeInterval
+    ) -> Bool {
+        let conversation = app.otherElements["chat-conversation"]
+        guard conversation.waitForExistence(timeout: 5) else { return false }
+
+        let predicate = NSPredicate(format: "value == %@", expectedValue)
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: conversation)
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
     }
 
     // MARK: - Sheet Dismissal

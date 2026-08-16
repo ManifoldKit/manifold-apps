@@ -74,16 +74,13 @@ final class SmokeUITests: XCTestCase {
 
         sendButton.tap()
 
-        // MessageBubbleView combines its content with
-        // `accessibilityElement(.combine)` and exposes a "User said: <content>"
-        // label on the wrapping element, which macOS exposes as an
-        // `otherElement` rather than a `staticText`.
-        let predicate = NSPredicate(format: "label CONTAINS[c] 'Hello from UI test'")
-        let userMessage = app.descendants(matching: .any).matching(predicate).firstMatch
-
-        let messageAppeared = waitForElement(userMessage, timeout: 5)
+        let completion = waitForCompletedChatTurn(app: app, timeout: 10)
         captureScreenshot(name: "Send-Flow-After-Send")
-        XCTAssertTrue(messageAppeared, "User message should appear in the chat after sending")
+        XCTAssertEqual(
+            completion,
+            "Response complete: Hello from the scripted UI-test backend.",
+            "Sending must complete a real scripted turn and surface the assistant response"
+        )
     }
 
     // MARK: - ModelSwitcherChipUITests.testSwitcherChipReachableAndOpensSwitcherOnCompactWidth
@@ -117,6 +114,29 @@ final class SmokeUITests: XCTestCase {
     // MARK: - SessionManagementUITests.testSwitchBetweenSessions
 
     func testSwitchBetweenSessions() throws {
+        openChatDetailIfNeeded(app: app)
+        XCTAssertTrue(
+            waitForChatInputReady(app: app, timeout: 30),
+            "Chat input should be ready before seeding the session-switch regression"
+        )
+        guard let initialInput = findMessageInput(app: app) else {
+            XCTFail("Message input must exist before seeding the first session")
+            return
+        }
+        initialInput.tap()
+        initialInput.typeText("Hello from UI test")
+        let initialSendButton = app.buttons["Send message"]
+        XCTAssertTrue(
+            initialSendButton.waitForExistence(timeout: 3) && initialSendButton.isEnabled,
+            "Send must be enabled before seeding the first session"
+        )
+        initialSendButton.tap()
+        XCTAssertEqual(
+            waitForCompletedChatTurn(app: app, timeout: 10),
+            "Response complete: Hello from the scripted UI-test backend.",
+            "The first session must own a completed turn before switching away"
+        )
+
         showSidebarIfNeeded(app: app)
 
         guard let newChatButton = findNewChatButton(app: app) else {
@@ -130,6 +150,14 @@ final class SmokeUITests: XCTestCase {
         // sidebar again before querying the session rows.
         if sessionRows().count < 2 {
             newChatButton.tap()
+            XCTAssertTrue(
+                waitForChatInputReady(app: app, timeout: 10),
+                "Creating a session should activate its empty chat detail"
+            )
+            XCTAssertTrue(
+                waitForChatTurnValue("Idle", app: app, timeout: 5),
+                "A new empty session must not expose the prior session's completed response"
+            )
             showSidebarIfNeeded(app: app)
             XCTAssertTrue(
                 waitForSessionRows(count: 2),
