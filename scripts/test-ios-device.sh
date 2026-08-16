@@ -2,104 +2,114 @@
 
 set -euo pipefail
 
-# Xcode 27 beta can stop delivering synthesized input after several app
-# launches in one UI-test operation. Keep the in-process tests together, but
-# give every app-launching test a fresh xcodebuild/XCTest runner. The test
-# enumeration below is authoritative: anything not explicitly classified as
-# app-launching or Foundation-only is still selected in the in-process shard.
-
-APP_LAUNCHING_TESTS=(
-    "ManifoldUITests/AppIntentsUITests/test_coldLaunchEnvelope_isIngestedOnlyAfterModelReadiness"
-    "ManifoldUITests/AppIntentsUITests/test_malformedColdLaunchEnvelope_isDiscardedAndReported"
-    "ManifoldUITests/AppIntentsUITests/test_registerSetReminder_executesThroughInferenceServiceRegistry"
-    "ManifoldUITests/AppIntentsUITests/test_runtimeWiring_reportsSharedRegistryStartupHandlerAndAppGroup"
-    "ManifoldUITests/AppIntentsUITests/test_sidebarAppIntentsRow_rendersRealFeatureView"
-    "ManifoldUITests/AppIntentsUITests/test_warmInboundURL_routesThroughRootViewIntoLiveChat"
-    "ManifoldUITests/CloudUITests/testEmptyStateMessage"
-    "ManifoldUITests/CloudUITests/testOpenCloudFeatureShowsAPIConfiguration"
-    "ManifoldUITests/CloudUITests/testSavedEndpointAppearsInModelSwitcherAndCanBeSelected"
-    "ManifoldUITests/EndpointStoreUITests/testAPIKeyRecoveryCanSaveEndpoint"
-    "ManifoldUITests/SmokeUITests/testEmptyStateShowsWelcome"
-    "ManifoldUITests/SmokeUITests/testSendMessageFlow"
-    "ManifoldUITests/SmokeUITests/testSwitchBetweenSessions"
-    "ManifoldUITests/SmokeUITests/testSwitcherChipReachableAndOpensSwitcherOnCompactWidth"
-    "ManifoldUITests/ThemingUITests/testSwitchingPresetChangesLivePreview"
-    "ManifoldUITests/ToolsUITests/testApprovedWriteToolCompletesAndReturnsResult"
-    "ManifoldUITests/ToolsUITests/testCloudBackendAdvertisesFullReferenceCatalog"
-)
+# The full UI suite runs in the simulator as part of `make test`. The physical
+# gate is deliberately limited to the one capability that a simulator cannot
+# prove: a fresh install selecting Apple Foundation Models and completing a
+# real generated turn.
+#
+# Xcode 27 beta on iPadOS 27 beta can leave the device compositor black after
+# repeated UI-test launches. Running simulator-oriented tests again on the
+# physical device adds no release evidence and can prevent the Foundation test
+# from running at all, so this gate launches exactly one XCTest session.
 
 FOUNDATION_TEST="ManifoldUITests/FoundationDeviceUITests/testFreshInstallLoadsFoundationAndCompletesRealTurn"
+FOUNDATION_TEST_NAME="testFreshInstallLoadsFoundationAndCompletesRealTurn()"
 
-write_classified_tests() {
+extract_result_value() {
+    local result_json="$1"
+    local key_path="$2"
+    local value
+
+    if ! value=$(/usr/bin/plutil -extract "$key_path" raw -o - "$result_json" 2>/dev/null); then
+        echo "device-test: result bundle is missing $key_path" >&2
+        return 1
+    fi
+    printf '%s\n' "$value"
+}
+
+verify_foundation_result() {
+    local result_json="$1"
+    local expected_device_id="$2"
+    local test_count
+    local test_name
+    local test_result
+    local device_id
+    local platform
+
+    test_count=$(extract_result_value \
+        "$result_json" \
+        "testNodes.0.children.0.children.0.children")
+    if [[ "$test_count" -ne 1 ]]; then
+        echo "device-test: expected exactly one physical Foundation test, found $test_count" >&2
+        return 1
+    fi
+
+    test_name=$(extract_result_value \
+        "$result_json" \
+        "testNodes.0.children.0.children.0.children.0.name")
+    if [[ "$test_name" != "$FOUNDATION_TEST_NAME" ]]; then
+        echo "device-test: required Foundation test did not execute (found: $test_name)" >&2
+        return 1
+    fi
+
+    test_result=$(extract_result_value \
+        "$result_json" \
+        "testNodes.0.children.0.children.0.children.0.result")
+    if [[ "$test_result" != "Passed" ]]; then
+        echo "device-test: Foundation test result was $test_result" >&2
+        return 1
+    fi
+
+    device_id=$(extract_result_value "$result_json" "devices.0.deviceId")
+    if [[ "$device_id" != "$expected_device_id" ]]; then
+        echo "device-test: result came from unexpected device $device_id" >&2
+        return 1
+    fi
+
+    platform=$(extract_result_value "$result_json" "devices.0.platform")
+    if [[ "$platform" != "iOS" ]]; then
+        echo "device-test: result came from unexpected platform $platform" >&2
+        return 1
+    fi
+}
+
+write_fixture() {
     local output_file="$1"
-    printf '%s\n' "${APP_LAUNCHING_TESTS[@]}" "$FOUNDATION_TEST" > "$output_file"
-}
+    local test_name="$2"
+    local test_result="$3"
+    local device_id="$4"
 
-validate_enumeration() {
-    local actual_file="$1"
-    local classified_file="$2"
-    local duplicate
-    local status=0
-
-    duplicate=$(/usr/bin/sort "$actual_file" | /usr/bin/uniq -d)
-    if [[ -n "$duplicate" ]]; then
-        echo "device-test: Xcode enumerated duplicate tests:" >&2
-        echo "$duplicate" >&2
-        status=1
-    fi
-
-    duplicate=$(/usr/bin/sort "$classified_file" | /usr/bin/uniq -d)
-    if [[ -n "$duplicate" ]]; then
-        echo "device-test: duplicate test classifications:" >&2
-        echo "$duplicate" >&2
-        status=1
-    fi
-
-    local test_identifier
-    while IFS= read -r test_identifier; do
-        if ! /usr/bin/grep -Fqx -- "$test_identifier" "$actual_file"; then
-            echo "device-test: classified test was not enumerated: $test_identifier" >&2
-            status=1
-        fi
-    done < "$classified_file"
-
-    return "$status"
-}
-
-derive_in_process_tests() {
-    local actual_file="$1"
-    local classified_file="$2"
-    local output_file="$3"
-    local grep_status
-
-    grep_status=0
-    /usr/bin/grep -Fvx -f "$classified_file" "$actual_file" > "$output_file" || grep_status=$?
-    if [[ "$grep_status" -ne 0 && "$grep_status" -ne 1 ]]; then
-        return "$grep_status"
-    fi
+    printf '%s\n' \
+        "{\"devices\":[{\"deviceId\":\"$device_id\",\"platform\":\"iOS\"}],\"testNodes\":[{\"children\":[{\"children\":[{\"children\":[{\"name\":\"$test_name\",\"result\":\"$test_result\"}]}]}]}]}" \
+        > "$output_file"
 }
 
 self_test() (
     local temp_dir
+    local valid_fixture
+    local missing_fixture
+    local failed_fixture
+    local expected_device="00008142-SELFTEST"
+
     temp_dir=$(/usr/bin/mktemp -d "${TMPDIR:-/private/tmp}/manifold-device-gate-self-test.XXXXXX")
     trap 'rm -rf "$temp_dir"' EXIT
 
-    local classified_file="$temp_dir/classified.txt"
-    local actual_file="$temp_dir/actual.txt"
-    local missing_file="$temp_dir/missing.txt"
-    local in_process_file="$temp_dir/in-process.txt"
-    local sentinel="ManifoldUITests/SentinelTests/testNewlyDiscoveredTest"
+    valid_fixture="$temp_dir/valid.json"
+    missing_fixture="$temp_dir/missing.json"
+    failed_fixture="$temp_dir/failed.json"
 
-    write_classified_tests "$classified_file"
-    printf '%s\n' "$sentinel" > "$actual_file"
-    /bin/cat "$classified_file" >> "$actual_file"
-    validate_enumeration "$actual_file" "$classified_file"
-    derive_in_process_tests "$actual_file" "$classified_file" "$in_process_file"
-    /usr/bin/grep -Fqx -- "$sentinel" "$in_process_file"
+    write_fixture "$valid_fixture" "$FOUNDATION_TEST_NAME" "Passed" "$expected_device"
+    verify_foundation_result "$valid_fixture" "$expected_device"
 
-    /usr/bin/grep -Fvx -- "${APP_LAUNCHING_TESTS[0]}" "$actual_file" > "$missing_file"
-    if validate_enumeration "$missing_file" "$classified_file" >/dev/null 2>&1; then
-        echo "device-test self-test: missing classified test failed to make validation red" >&2
+    write_fixture "$missing_fixture" "testDifferentTest()" "Passed" "$expected_device"
+    if verify_foundation_result "$missing_fixture" "$expected_device" >/dev/null 2>&1; then
+        echo "device-test self-test: missing Foundation test failed to make validation red" >&2
+        return 1
+    fi
+
+    write_fixture "$failed_fixture" "$FOUNDATION_TEST_NAME" "Failed" "$expected_device"
+    if verify_foundation_result "$failed_fixture" "$expected_device" >/dev/null 2>&1; then
+        echo "device-test self-test: failed Foundation result failed to make validation red" >&2
         return 1
     fi
 
@@ -132,65 +142,23 @@ COMMON_ARGS=(
 
 temp_dir=$(/usr/bin/mktemp -d "${TMPDIR:-/private/tmp}/manifold-device-gate.XXXXXX")
 trap 'rm -rf "$temp_dir"' EXIT
-enumeration_json="$temp_dir/tests.json"
-actual_tests="$temp_dir/actual.txt"
-classified_tests="$temp_dir/classified.txt"
-in_process_tests="$temp_dir/in-process.txt"
+result_bundle="$temp_dir/FoundationDevice.xcresult"
+result_json="$temp_dir/FoundationDevice.json"
 
 self_test
 
 echo "device-test: building the signed test products once"
 xcodebuild build-for-testing "${COMMON_ARGS[@]}"
 
-echo "device-test: enumerating the exact built test bundle"
+echo "device-test: running one isolated real Foundation turn"
 xcodebuild test-without-building "${COMMON_ARGS[@]}" \
-    -enumerate-tests \
-    -test-enumeration-style flat \
-    -test-enumeration-format json \
-    -test-enumeration-output-path "$enumeration_json"
+    "-only-testing:$FOUNDATION_TEST" \
+    -resultBundlePath "$result_bundle"
 
-disabled_count=$(/usr/bin/plutil -extract values.0.disabledTests raw -o - "$enumeration_json")
-if [[ "$disabled_count" -ne 0 ]]; then
-    echo "device-test: disabled tests are not permitted in the release gate" >&2
-    exit 1
-fi
+xcrun xcresulttool get test-results tests \
+    --path "$result_bundle" \
+    --compact \
+    > "$result_json"
 
-enabled_count=$(/usr/bin/plutil -extract values.0.enabledTests raw -o - "$enumeration_json")
-if [[ "$enabled_count" -eq 0 ]]; then
-    echo "device-test: Xcode enumerated no enabled tests" >&2
-    exit 1
-fi
-
-test_index=0
-while [[ "$test_index" -lt "$enabled_count" ]]; do
-    identifier=$(/usr/bin/plutil \
-        -extract "values.0.enabledTests.$test_index.identifier" \
-        raw -o - "$enumeration_json")
-    printf '%s\n' "${identifier%\(\)}" >> "$actual_tests"
-    test_index=$((test_index + 1))
-done
-
-write_classified_tests "$classified_tests"
-validate_enumeration "$actual_tests" "$classified_tests"
-derive_in_process_tests "$actual_tests" "$classified_tests" "$in_process_tests"
-
-selection_args=()
-while IFS= read -r test_identifier; do
-    [[ -n "$test_identifier" ]] || continue
-    selection_args+=("-only-testing:$test_identifier")
-done < "$in_process_tests"
-
-if [[ "${#selection_args[@]}" -gt 0 ]]; then
-    echo "device-test: running ${#selection_args[@]} in-process tests"
-    xcodebuild test-without-building "${COMMON_ARGS[@]}" "${selection_args[@]}"
-fi
-
-for test_identifier in "${APP_LAUNCHING_TESTS[@]}"; do
-    echo "device-test: running fresh UI runner for $test_identifier"
-    xcodebuild test-without-building "${COMMON_ARGS[@]}" \
-        "-only-testing:$test_identifier"
-done
-
-echo "device-test: running isolated real Foundation turn"
-xcodebuild test-without-building "${COMMON_ARGS[@]}" \
-    "-only-testing:$FOUNDATION_TEST"
+verify_foundation_result "$result_json" "$IOS_DEVICE_ID"
+echo "device-test: verified one passed real Foundation turn on $IOS_DEVICE_ID"

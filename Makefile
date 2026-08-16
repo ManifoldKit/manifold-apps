@@ -71,7 +71,7 @@ archive-ios: generate
 
 # The supported upload path is deliberately expensive and fail-closed: a
 # TestFlight upload must follow both the simulator/macOS suite and signed
-# physical-device suite in the same invocation.
+# physical-device Foundation turn in the same invocation.
 testflight-upload: release-inputs test device-test archive-ios
 	xcodebuild -exportArchive \
 		-archivePath '$(ARCHIVE_PATH)' \

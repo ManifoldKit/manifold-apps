@@ -19,15 +19,33 @@ extension XCTestCase {
         let app = XCUIApplication()
         app.launchArguments += ["--uitesting"]
         app.launchArguments += additionalArguments
-        #if !os(macOS)
         app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
-        #endif
         app.launch()
         #if os(macOS)
-        app.activate()
+        // XCUIApplication termination can persist an intentional "all windows
+        // closed" state even when ApplePersistenceIgnoreState is set. A later
+        // test launch then owns the menu bar but has no window or app content.
+        // Reopen the WindowGroup explicitly so each test starts from a visible,
+        // independently reachable production surface.
+        if !app.windows.firstMatch.waitForExistence(timeout: 2) {
+            app.typeKey("n", modifierFlags: .command)
+        }
+        XCTAssertTrue(
+            app.windows.firstMatch.waitForExistence(timeout: 5),
+            "App should present a window under macOS UI tests",
+            file: file,
+            line: line
+        )
+        // A GUI host that launched xcodebuild can remain frontmost even after
+        // `activate()`. Click the tested window's title region directly: the
+        // coordinate event is valid while its descendants are non-hittable,
+        // and makes subsequent control interactions deterministic.
+        app.windows.firstMatch
+            .coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.05))
+            .tap()
         XCTAssertTrue(
             app.wait(for: .runningForeground, timeout: 5),
-            "App should reach the foreground under macOS UI tests",
+            "App should reach the foreground after focusing its window",
             file: file,
             line: line
         )

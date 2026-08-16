@@ -2,7 +2,8 @@
 
 Manifold `0.1.0` is an internal TestFlight release. Simulator CI is necessary,
 but it is not the release gate: the uploaded build must be installed from
-TestFlight and exercised on a physical iPhone before the `0.1.0` tag is cut.
+TestFlight and exercised on a physical iPhone or iPad before the `0.1.0` tag is
+cut.
 
 ## Prerequisites
 
@@ -25,7 +26,9 @@ make test
 
 With the device connected, discover the Xcode destination identifier with the
 Devices and Simulators window or `xcodebuild -project Manifold.xcodeproj
--scheme Manifold -showdestinations`, then run the signed UI-test gate:
+-scheme Manifold -showdestinations`, then run the signed device-only Foundation
+gate. It verifies a fresh install loads Apple Foundation Models and completes a
+real generated turn; the complete simulator/macOS suite remains `make test`:
 
 ```bash
 make device-test IOS_DEVICE_ID='<device-udid>' DEVELOPMENT_TEAM='<team-id>'

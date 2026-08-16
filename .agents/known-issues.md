@@ -56,15 +56,16 @@ even though `devicectl` reports the device connected, paired, unlocked,
 Developer Mode enabled, and the backlight active. Restarting CoreDeviceService
 restores enumeration but not display capture or input. A full-suite retry after
 a reboot can pass its first app launch and then degrade again on later launches;
-an isolated test can pass immediately beforehand. The physical gate therefore
-builds once and runs each app-launching test through a fresh `xcodebuild`
-operation, while its enumeration check keeps every built test covered. Treat
-the simultaneous black capture + visible accessibility tree as a device-runner
-failure, not an
-app-layout verdict; reconnect/restart Xcode and the iPad before rerunning the
-physical gate. A previously completed real Foundation turn remains valid
-evidence for the app path, but never use it to waive the final fresh device
-gate for a release candidate.
+an isolated test can pass immediately beforehand. Fresh `xcodebuild` processes
+do not reset the device-side XCTest/compositor state, and terminating
+`testmanagerd` or `AutomationModeUI` does not recover the display. The release
+gate therefore keeps the complete simulator/macOS suite in `make test` and
+runs exactly one physical XCTest session: fresh install → real Foundation
+model load → generated reply. It inspects the xcresult so a missing, skipped,
+zero-test, wrong-device, or failed result cannot pass. Treat simultaneous black
+capture + a still-running app as a device-runner failure, not an app-layout
+verdict; reboot and unlock the iPad before rerunning the isolated device gate.
+TestFlight acceptance remains a separate manual real-device gate.
 
 ## Ad-hoc simulator UI tests cannot prove App Group sharing cross-process
 
@@ -108,3 +109,17 @@ outer button carries the active model label while its child is labelled
 `Switch model`. Assertions about the active model must filter the identified
 query by the expected label before taking `firstMatch`; a keyed single-element
 lookup fails when both accessibility nodes are present.
+
+## macOS UI tests can launch with no window or leave the host app frontmost
+
+The GUI process that launched `xcodebuild` can remain frontmost after the test
+app launches, leaving its controls disabled and non-hittable. Calling
+`XCUIApplication.activate()` is not a repair: under the full gate it can block
+for about a minute and throw while the app stays `Running Background`. A prior
+test can also persist an intentional all-windows-closed state, leaving only the
+app menu bar after relaunch. Launch with `-ApplePersistenceIgnoreState YES`,
+send Command-N when no app window appears, then tap an inert point in the tested
+window's title region and assert foreground state before interacting with
+controls. In ManifoldStudio, normalized x=0.3 is the title; x=0.5 hits the
+model-switcher chip and opens its popover, so a generic title-center click
+introduces a different test failure.
