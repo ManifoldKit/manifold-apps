@@ -6,7 +6,7 @@ import XCTest
 /// the OS-resident model before the build is eligible for TestFlight.
 final class FoundationDeviceUITests: XCTestCase {
     @MainActor
-    func testFreshInstallLoadsFoundationAndCompletesRealTurn() throws {
+    func testIsolatedStoreLoadsFoundationAndCompletesRealTurn() throws {
         #if targetEnvironment(simulator)
         throw XCTSkip("Real Foundation Models validation requires a physical iOS device.")
         #else

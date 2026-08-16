@@ -60,12 +60,13 @@ an isolated test can pass immediately beforehand. Fresh `xcodebuild` processes
 do not reset the device-side XCTest/compositor state, and terminating
 `testmanagerd` or `AutomationModeUI` does not recover the display. The release
 gate therefore keeps the complete simulator/macOS suite in `make test` and
-runs exactly one physical XCTest session: fresh install → real Foundation
-model load → generated reply. It inspects the xcresult so a missing, skipped,
-zero-test, wrong-device, or failed result cannot pass. Treat simultaneous black
-capture + a still-running app as a device-runner failure, not an app-layout
-verdict; reboot and unlock the iPad before rerunning the isolated device gate.
-TestFlight acceptance remains a separate manual real-device gate.
+runs exactly one physical XCTest session: isolated UI-test store → production
+Foundation model load → generated reply. Fresh production-install behavior
+stays in the separate TestFlight acceptance checklist. The gate inspects the
+xcresult so a missing, skipped, zero-test, wrong-device, or failed result cannot
+pass. Treat simultaneous black capture + a still-running app as a device-runner
+failure, not an app-layout verdict; reboot and unlock the iPad before rerunning
+the isolated device gate.
 
 ## Ad-hoc simulator UI tests cannot prove App Group sharing cross-process
 

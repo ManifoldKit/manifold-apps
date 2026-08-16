@@ -4,16 +4,17 @@ set -euo pipefail
 
 # The full UI suite runs in the simulator as part of `make test`. The physical
 # gate is deliberately limited to the one capability that a simulator cannot
-# prove: a fresh install selecting Apple Foundation Models and completing a
-# real generated turn.
+# prove: an isolated UI-test store selecting Apple Foundation Models through
+# the production inference service and completing a real generated turn. Fresh
+# production-install behavior is verified separately from the TestFlight build.
 #
 # Xcode 27 beta on iPadOS 27 beta can leave the device compositor black after
 # repeated UI-test launches. Running simulator-oriented tests again on the
 # physical device adds no release evidence and can prevent the Foundation test
 # from running at all, so this gate launches exactly one XCTest session.
 
-FOUNDATION_TEST="ManifoldUITests/FoundationDeviceUITests/testFreshInstallLoadsFoundationAndCompletesRealTurn"
-FOUNDATION_TEST_NAME="testFreshInstallLoadsFoundationAndCompletesRealTurn()"
+FOUNDATION_TEST="ManifoldUITests/FoundationDeviceUITests/testIsolatedStoreLoadsFoundationAndCompletesRealTurn"
+FOUNDATION_TEST_NAME="testIsolatedStoreLoadsFoundationAndCompletesRealTurn()"
 
 extract_result_value() {
     local result_json="$1"
@@ -78,40 +79,80 @@ write_fixture() {
     local test_name="$2"
     local test_result="$3"
     local device_id="$4"
+    local platform="$5"
+    local second_test_name="${6:-}"
+    local children
+
+    children="{\"name\":\"$test_name\",\"result\":\"$test_result\"}"
+    if [[ -n "$second_test_name" ]]; then
+        children+=",{\"name\":\"$second_test_name\",\"result\":\"Passed\"}"
+    fi
 
     printf '%s\n' \
-        "{\"devices\":[{\"deviceId\":\"$device_id\",\"platform\":\"iOS\"}],\"testNodes\":[{\"children\":[{\"children\":[{\"children\":[{\"name\":\"$test_name\",\"result\":\"$test_result\"}]}]}]}]}" \
+        "{\"devices\":[{\"deviceId\":\"$device_id\",\"platform\":\"$platform\"}],\"testNodes\":[{\"children\":[{\"children\":[{\"children\":[$children]}]}]}]}" \
         > "$output_file"
+}
+
+assert_fixture_rejected() {
+    local fixture="$1"
+    local expected_device="$2"
+    local description="$3"
+
+    if verify_foundation_result "$fixture" "$expected_device" >/dev/null 2>&1; then
+        echo "device-test self-test: $description failed to make validation red" >&2
+        return 1
+    fi
 }
 
 self_test() (
     local temp_dir
     local valid_fixture
+    local empty_fixture
+    local duplicate_fixture
     local missing_fixture
     local failed_fixture
+    local wrong_device_fixture
+    local wrong_platform_fixture
+    local malformed_fixture
     local expected_device="00008142-SELFTEST"
 
     temp_dir=$(/usr/bin/mktemp -d "${TMPDIR:-/private/tmp}/manifold-device-gate-self-test.XXXXXX")
     trap 'rm -rf "$temp_dir"' EXIT
 
     valid_fixture="$temp_dir/valid.json"
+    empty_fixture="$temp_dir/empty.json"
+    duplicate_fixture="$temp_dir/duplicate.json"
     missing_fixture="$temp_dir/missing.json"
     failed_fixture="$temp_dir/failed.json"
+    wrong_device_fixture="$temp_dir/wrong-device.json"
+    wrong_platform_fixture="$temp_dir/wrong-platform.json"
+    malformed_fixture="$temp_dir/malformed.json"
 
-    write_fixture "$valid_fixture" "$FOUNDATION_TEST_NAME" "Passed" "$expected_device"
+    write_fixture "$valid_fixture" "$FOUNDATION_TEST_NAME" "Passed" "$expected_device" "iOS"
     verify_foundation_result "$valid_fixture" "$expected_device"
 
-    write_fixture "$missing_fixture" "testDifferentTest()" "Passed" "$expected_device"
-    if verify_foundation_result "$missing_fixture" "$expected_device" >/dev/null 2>&1; then
-        echo "device-test self-test: missing Foundation test failed to make validation red" >&2
-        return 1
-    fi
+    printf '%s\n' \
+        "{\"devices\":[{\"deviceId\":\"$expected_device\",\"platform\":\"iOS\"}],\"testNodes\":[{\"children\":[{\"children\":[{\"children\":[]}]}]}]}" \
+        > "$empty_fixture"
+    assert_fixture_rejected "$empty_fixture" "$expected_device" "zero-test result"
 
-    write_fixture "$failed_fixture" "$FOUNDATION_TEST_NAME" "Failed" "$expected_device"
-    if verify_foundation_result "$failed_fixture" "$expected_device" >/dev/null 2>&1; then
-        echo "device-test self-test: failed Foundation result failed to make validation red" >&2
-        return 1
-    fi
+    write_fixture "$duplicate_fixture" "$FOUNDATION_TEST_NAME" "Passed" "$expected_device" "iOS" "testUnexpectedExtraTest()"
+    assert_fixture_rejected "$duplicate_fixture" "$expected_device" "multiple-test result"
+
+    write_fixture "$missing_fixture" "testDifferentTest()" "Passed" "$expected_device" "iOS"
+    assert_fixture_rejected "$missing_fixture" "$expected_device" "missing Foundation test"
+
+    write_fixture "$failed_fixture" "$FOUNDATION_TEST_NAME" "Failed" "$expected_device" "iOS"
+    assert_fixture_rejected "$failed_fixture" "$expected_device" "failed Foundation result"
+
+    write_fixture "$wrong_device_fixture" "$FOUNDATION_TEST_NAME" "Passed" "00008142-WRONG" "iOS"
+    assert_fixture_rejected "$wrong_device_fixture" "$expected_device" "wrong device"
+
+    write_fixture "$wrong_platform_fixture" "$FOUNDATION_TEST_NAME" "Passed" "$expected_device" "iOS Simulator"
+    assert_fixture_rejected "$wrong_platform_fixture" "$expected_device" "wrong platform"
+
+    printf '%s\n' '{"devices":[],"testNodes":[]}' > "$malformed_fixture"
+    assert_fixture_rejected "$malformed_fixture" "$expected_device" "missing result fields"
 
     echo "device-test self-test passed"
 )

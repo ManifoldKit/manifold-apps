@@ -43,11 +43,14 @@ iPhone-17-generation-only Mac): `make test IOS_DESTINATION='platform=iOS
 Simulator,name=iPhone 17 Pro'`.
 
 The full UI suite belongs to `make test` and runs on the simulator/macOS. The
-physical gate builds signed products once, runs exactly the fresh-install real
-Foundation turn, then inspects the xcresult to prove that one required test
-passed on the requested iOS device. Do not add simulator-oriented UI tests to
-that device invocation: Xcode 27 beta can freeze the iPadOS 27 compositor after
-repeated XCTest launches and prevent the device-only evidence from running.
+physical gate builds signed products once, runs exactly one real Foundation
+turn against an isolated UI-test store, then inspects the xcresult to prove that
+one required test passed on the requested iOS device. It exercises the
+production inference service and backend registration, not production
+persistence; the TestFlight checklist separately proves fresh-install behavior.
+Do not add simulator-oriented UI tests to that device invocation: Xcode 27 beta
+can freeze the iPadOS 27 compositor after repeated XCTest launches and prevent
+the device-only evidence from running.
 
 ## Constraints specific to this repo
 

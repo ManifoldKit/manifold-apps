@@ -27,8 +27,10 @@ make test
 With the device connected, discover the Xcode destination identifier with the
 Devices and Simulators window or `xcodebuild -project Manifold.xcodeproj
 -scheme Manifold -showdestinations`, then run the signed device-only Foundation
-gate. It verifies a fresh install loads Apple Foundation Models and completes a
-real generated turn; the complete simulator/macOS suite remains `make test`:
+gate. It verifies an isolated UI-test store loads Apple Foundation Models
+through the production inference service and completes a real generated turn;
+the complete simulator/macOS suite remains `make test`, and the TestFlight
+checklist below separately verifies a fresh production install:
 
 ```bash
 make device-test IOS_DEVICE_ID='<device-udid>' DEVELOPMENT_TEAM='<team-id>'
