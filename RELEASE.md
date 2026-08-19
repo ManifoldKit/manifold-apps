@@ -17,7 +17,7 @@ cut.
 
 ## Build gates
 
-Run the complete simulator and macOS gate:
+Run the complete iOS simulator and macOS Manifold gate:
 
 ```bash
 make build

@@ -10,21 +10,21 @@ enum LaunchArguments {
         CommandLine.arguments.contains("--uitesting")
     }
 
-    /// Enables the macOS Studio local-model UI regression fixture. This stays
+    /// Enables the macOS Manifold local-model UI regression fixture. This stays
     /// nested under `--uitesting` so production never receives synthetic
     /// models or a scripted local-model factory.
-    static var runsStudioLocalModelTest: Bool {
-        isUITesting && CommandLine.arguments.contains("--studio-local-model-test")
+    static var runsMacLocalModelTest: Bool {
+        isUITesting && CommandLine.arguments.contains("--mac-local-model-test")
     }
 
-    /// Enables the opt-in Studio hardware gate. Unlike
-    /// ``runsStudioLocalModelTest``, this is deliberately a live inference
+    /// Enables the opt-in Manifold Mac hardware gate. Unlike
+    /// ``runsMacLocalModelTest``, this is deliberately a live inference
     /// path: it discovers two installed model assets and lets the normal
     /// RootView selection dispatch load MLX and llama.cpp backends. It may be
     /// combined with `--uitesting` solely to get the ephemeral SwiftData store;
     /// it must never select the scripted backend or fixture catalogue.
-    static var runsStudioRealModelTest: Bool {
-        CommandLine.arguments.contains("--studio-real-model-test")
+    static var runsMacRealModelTest: Bool {
+        CommandLine.arguments.contains("--mac-real-model-test")
     }
 
     /// Enables the physical-iOS Foundation Models release gate. The launch
@@ -35,20 +35,20 @@ enum LaunchArguments {
         isUITesting && CommandLine.arguments.contains("--ios-real-foundation-test")
     }
 
-    /// The installed MLX directory exercised by the Studio hardware gate.
+    /// The installed MLX directory exercised by the Manifold Mac hardware gate.
     /// The shell gate passes this through explicitly, while the default keeps
     /// the one-command local workflow useful on the maintainer's machine.
-    static var studioRealMLXModelURL: URL {
+    static var macRealMLXModelURL: URL {
         modelURL(
-            environmentKey: "MANIFOLD_STUDIO_REAL_MLX_MODEL_PATH",
+            environmentKey: "MANIFOLD_MAC_REAL_MLX_MODEL_PATH",
             defaultPath: "~/Documents/Models/mlx/Qwen3.5-2B-4bit"
         )
     }
 
-    /// The installed GGUF file exercised by the Studio hardware gate.
-    static var studioRealGGUFModelURL: URL {
+    /// The installed GGUF file exercised by the Manifold Mac hardware gate.
+    static var macRealGGUFModelURL: URL {
         modelURL(
-            environmentKey: "MANIFOLD_STUDIO_REAL_GGUF_MODEL_PATH",
+            environmentKey: "MANIFOLD_MAC_REAL_GGUF_MODEL_PATH",
             defaultPath: "~/Documents/Models/gguf/Qwen3.5-2B/Qwen_Qwen3.5-2B-Q4_K_M.gguf"
         )
     }
@@ -56,13 +56,13 @@ enum LaunchArguments {
     /// Shell-validated weight bytes for the hardware-gate MLX directory.
     /// Passing this across the XCTest process boundary avoids enumerating a
     /// TCC-protected Documents directory during app bootstrap.
-    static var studioRealMLXModelBytes: UInt64? {
-        modelBytes(environmentKey: "MANIFOLD_STUDIO_REAL_MLX_MODEL_BYTES")
+    static var macRealMLXModelBytes: UInt64? {
+        modelBytes(environmentKey: "MANIFOLD_MAC_REAL_MLX_MODEL_BYTES")
     }
 
     /// Shell-validated byte size for the hardware-gate GGUF file.
-    static var studioRealGGUFModelBytes: UInt64? {
-        modelBytes(environmentKey: "MANIFOLD_STUDIO_REAL_GGUF_MODEL_BYTES")
+    static var macRealGGUFModelBytes: UInt64? {
+        modelBytes(environmentKey: "MANIFOLD_MAC_REAL_GGUF_MODEL_BYTES")
     }
 
     /// Seeds ChatView's real API-key recovery banner for the endpoint-store

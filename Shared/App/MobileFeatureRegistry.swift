@@ -1,6 +1,6 @@
 /// The feature set shown in the iOS `Manifold` app's sidebar. Order is
 /// display order. No `MCPFeature` — the MCP client surface targets macOS
-/// only in this repo's product split (see ``StudioFeatureRegistry``).
+/// only in this repo's product split (see ``MacFeatureRegistry``).
 enum MobileFeatureRegistry {
     static let all: [any AppFeature.Type] = [
         ToolsFeature.self,

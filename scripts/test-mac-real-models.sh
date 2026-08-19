@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Runs the opt-in Studio MLX -> GGUF -> MLX UI hardware gate. This is not a
+# Runs the opt-in Manifold Mac MLX -> GGUF -> MLX UI hardware gate. This is not a
 # fixture lane: it intentionally fails before xcodebuild when the local
 # prerequisites are absent, rather than reporting a misleading skipped pass.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MLX_MODEL_PATH="${MANIFOLD_STUDIO_REAL_MLX_MODEL_PATH:-$HOME/Documents/Models/mlx/Qwen3.5-2B-4bit}"
-GGUF_MODEL_PATH="${MANIFOLD_STUDIO_REAL_GGUF_MODEL_PATH:-$HOME/Documents/Models/gguf/Qwen3.5-2B/Qwen_Qwen3.5-2B-Q4_K_M.gguf}"
+MLX_MODEL_PATH="${MANIFOLD_MAC_REAL_MLX_MODEL_PATH:-$HOME/Documents/Models/mlx/Qwen3.5-2B-4bit}"
+GGUF_MODEL_PATH="${MANIFOLD_MAC_REAL_GGUF_MODEL_PATH:-$HOME/Documents/Models/gguf/Qwen3.5-2B/Qwen_Qwen3.5-2B-Q4_K_M.gguf}"
 
 fail() {
-  printf 'Studio real-model gate: %s\n' "$*" >&2
+  printf 'Manifold Mac real-model gate: %s\n' "$*" >&2
   exit 1
 }
 
@@ -67,14 +67,14 @@ GGUF_MODEL_BYTES="$(stat -f '%z' "$GGUF_MODEL_PATH")" || fail "could not stat GG
 # The UI-test app has its own TCC boundary. Stage clone-on-write copies into a
 # uniquely named temporary directory so the real backend opens paths that are
 # directly accessible to the launched app without duplicating the model data.
-STAGING_ROOT="$(mktemp -d /private/tmp/manifold-studio-real-models.XXXXXX)" || fail "could not create the real-model staging directory"
+STAGING_ROOT="$(mktemp -d /private/tmp/manifold-mac-real-models.XXXXXX)" || fail "could not create the real-model staging directory"
 cleanup_staging() {
   case "$STAGING_ROOT" in
-    /private/tmp/manifold-studio-real-models.*)
+    /private/tmp/manifold-mac-real-models.*)
       /bin/rm -rf -- "$STAGING_ROOT"
       ;;
     *)
-      printf 'Studio real-model gate: refusing to remove unexpected staging path: %s\n' "$STAGING_ROOT" >&2
+      printf 'Manifold Mac real-model gate: refusing to remove unexpected staging path: %s\n' "$STAGING_ROOT" >&2
       return 1
       ;;
   esac
@@ -92,18 +92,18 @@ cd "$REPO_ROOT"
 if ! xcodegen generate; then
   fail "XcodeGen failed to generate Manifold.xcodeproj."
 fi
-MANIFOLD_STUDIO_REAL_MODEL_TEST=1 \
-MANIFOLD_STUDIO_REAL_MLX_MODEL_PATH="$STAGED_MLX_MODEL_PATH" \
-MANIFOLD_STUDIO_REAL_GGUF_MODEL_PATH="$STAGED_GGUF_MODEL_PATH" \
-MANIFOLD_STUDIO_REAL_MLX_MODEL_BYTES="$MLX_MODEL_BYTES" \
-MANIFOLD_STUDIO_REAL_GGUF_MODEL_BYTES="$GGUF_MODEL_BYTES" \
+MANIFOLD_MAC_REAL_MODEL_TEST=1 \
+MANIFOLD_MAC_REAL_MLX_MODEL_PATH="$STAGED_MLX_MODEL_PATH" \
+MANIFOLD_MAC_REAL_GGUF_MODEL_PATH="$STAGED_GGUF_MODEL_PATH" \
+MANIFOLD_MAC_REAL_MLX_MODEL_BYTES="$MLX_MODEL_BYTES" \
+MANIFOLD_MAC_REAL_GGUF_MODEL_BYTES="$GGUF_MODEL_BYTES" \
 xcodebuild test \
   -project Manifold.xcodeproj \
-  -scheme ManifoldStudio \
+  -scheme ManifoldMac \
   -destination 'platform=macOS,arch=arm64' \
   -skipPackagePluginValidation \
-  MANIFOLD_STUDIO_REAL_MODEL_TEST=1 \
-  MANIFOLD_STUDIO_REAL_MLX_MODEL_PATH="$STAGED_MLX_MODEL_PATH" \
-  MANIFOLD_STUDIO_REAL_GGUF_MODEL_PATH="$STAGED_GGUF_MODEL_PATH" \
-  MANIFOLD_STUDIO_REAL_MLX_MODEL_BYTES="$MLX_MODEL_BYTES" \
-  MANIFOLD_STUDIO_REAL_GGUF_MODEL_BYTES="$GGUF_MODEL_BYTES"
+  MANIFOLD_MAC_REAL_MODEL_TEST=1 \
+  MANIFOLD_MAC_REAL_MLX_MODEL_PATH="$STAGED_MLX_MODEL_PATH" \
+  MANIFOLD_MAC_REAL_GGUF_MODEL_PATH="$STAGED_GGUF_MODEL_PATH" \
+  MANIFOLD_MAC_REAL_MLX_MODEL_BYTES="$MLX_MODEL_BYTES" \
+  MANIFOLD_MAC_REAL_GGUF_MODEL_BYTES="$GGUF_MODEL_BYTES"

@@ -2,7 +2,7 @@ import SwiftUI
 import ManifoldKit
 import ManifoldUIModelManagement
 
-/// The single navigation shell for both `Manifold` and `ManifoldStudio` —
+/// The single navigation shell for both iOS and macOS `Manifold` —
 /// sessions + the platform feature registry in the sidebar, `ChatView` (or
 /// a selected feature's view) in the detail column. Reads `AppEnvironment`
 /// from the SwiftUI environment; owns no bootstrap state of its own.
@@ -44,7 +44,7 @@ struct RootView: View {
         #if os(iOS)
         MobileFeatureRegistry.all
         #else
-        StudioFeatureRegistry.all
+        MacFeatureRegistry.all
         #endif
     }
 

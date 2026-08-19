@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Stub — MCP client surface (manifold-apps W3 P4). macOS-only — see
-/// ``StudioFeatureRegistry`` vs ``MobileFeatureRegistry``. A later worker
+/// ``MacFeatureRegistry`` vs ``MobileFeatureRegistry``. A later worker
 /// replaces only `install(into:)`/`makeView(env:)` below.
 enum MCPFeature: AppFeature {
     static let id = "mcp"

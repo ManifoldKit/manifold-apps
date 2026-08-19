@@ -1,19 +1,19 @@
 import Foundation
 import XCTest
 
-/// Opt-in physical-hardware coverage for the Studio local backend wiring.
+/// Opt-in physical-hardware coverage for the Manifold Mac local backend wiring.
 ///
-/// The normal Studio UI target still runs the deterministic fixture test. This
+/// The normal Manifold Mac UI target still runs the deterministic fixture test. This
 /// test is deliberately skipped unless the real-model scheme setting expands
-/// `MANIFOLD_STUDIO_REAL_MODEL_TEST=1`; when enabled, one app process loads
+/// `MANIFOLD_MAC_REAL_MODEL_TEST=1`; when enabled, one app process loads
 /// the installed MLX model, a real GGUF, then MLX again and completes a turn
 /// after each switch.
-final class StudioRealModelUITests: XCTestCase {
-    private static let optInEnvironmentKey = "MANIFOLD_STUDIO_REAL_MODEL_TEST"
-    private static let mlxPathEnvironmentKey = "MANIFOLD_STUDIO_REAL_MLX_MODEL_PATH"
-    private static let ggufPathEnvironmentKey = "MANIFOLD_STUDIO_REAL_GGUF_MODEL_PATH"
-    private static let mlxBytesEnvironmentKey = "MANIFOLD_STUDIO_REAL_MLX_MODEL_BYTES"
-    private static let ggufBytesEnvironmentKey = "MANIFOLD_STUDIO_REAL_GGUF_MODEL_BYTES"
+final class MacRealModelUITests: XCTestCase {
+    private static let optInEnvironmentKey = "MANIFOLD_MAC_REAL_MODEL_TEST"
+    private static let mlxPathEnvironmentKey = "MANIFOLD_MAC_REAL_MLX_MODEL_PATH"
+    private static let ggufPathEnvironmentKey = "MANIFOLD_MAC_REAL_GGUF_MODEL_PATH"
+    private static let mlxBytesEnvironmentKey = "MANIFOLD_MAC_REAL_MLX_MODEL_BYTES"
+    private static let ggufBytesEnvironmentKey = "MANIFOLD_MAC_REAL_GGUF_MODEL_BYTES"
     private static let defaultMLXModelPath = "~/Documents/Models/mlx/Qwen3.5-2B-4bit"
     private static let defaultGGUFModelPath = "~/Documents/Models/gguf/Qwen3.5-2B/Qwen_Qwen3.5-2B-Q4_K_M.gguf"
 
@@ -31,7 +31,7 @@ final class StudioRealModelUITests: XCTestCase {
         continueAfterFailure = false
         guard ProcessInfo.processInfo.environment[Self.optInEnvironmentKey] == "1" else {
             throw XCTSkip(
-                "Studio real-model hardware gate is opt-in. Run scripts/test-studio-real-models.sh or make studio-real-models on an arm64 Mac with the required models."
+                "Manifold Mac real-model hardware gate is opt-in. Run scripts/test-mac-real-models.sh or make mac-real-models on an arm64 Mac with the required models."
             )
         }
 
@@ -39,7 +39,7 @@ final class StudioRealModelUITests: XCTestCase {
         // Keep persistence isolated between gate runs. AppEnvironment treats
         // the real-model argument as authoritative for inference wiring, so
         // --uitesting cannot choose ScriptedBackend or its fixture catalogue.
-        app.launchArguments = ["--uitesting", "--studio-real-model-test"]
+        app.launchArguments = ["--uitesting", "--mac-real-model-test"]
         app.launchEnvironment[Self.optInEnvironmentKey] = "1"
         for key in [
             Self.mlxPathEnvironmentKey,
@@ -53,7 +53,7 @@ final class StudioRealModelUITests: XCTestCase {
         }
         app.launch()
         app.activate()
-        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10), "Studio should reach the foreground for the real-model gate")
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10), "Manifold Mac should reach the foreground for the real-model gate")
         openChatDetailIfNeeded(app: app)
     }
 
@@ -147,7 +147,7 @@ final class StudioRealModelUITests: XCTestCase {
         let chip = app.descendants(matching: .any)["chat-model-switcher-chip"]
         XCTAssertTrue(
             chip.waitForExistence(timeout: 180) && chip.isHittable,
-            "Studio ChatView should expose its host-owned model switcher after real model discovery"
+            "Manifold Mac ChatView should expose its host-owned model switcher after real model discovery"
         )
         chip.tap()
     }

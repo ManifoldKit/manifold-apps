@@ -64,11 +64,12 @@ targets:
         # MinimalExample).
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "Voice input transcribes your speech into the message composer."
 
-  ManifoldStudio:
+  ManifoldMac:
     type: application
     platform: macOS
+    productName: Manifold
     sources:
-      - Studio
+      - Mac
       - Shared
     dependencies:
       - package: ManifoldKit
@@ -85,7 +86,9 @@ targets:
         product: ManifoldLlama
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.manifoldkit.ManifoldStudio
+        PRODUCT_NAME: Manifold
+        PRODUCT_BUNDLE_IDENTIFIER: com.manifoldkit.Manifold
+        INFOPLIST_KEY_CFBundleDisplayName: Manifold
         MARKETING_VERSION: 0.1.0
         CURRENT_PROJECT_VERSION: 1
         SWIFT_VERSION: "6.0"
@@ -122,17 +125,17 @@ targets:
         SWIFT_VERSION: "6.0"
         GENERATE_INFOPLIST_FILE: YES
 
-  ManifoldStudioUITests:
+  ManifoldMacUITests:
     type: bundle.ui-testing
     platform: macOS
     sources:
-      - ManifoldStudioUITests
+      - MacUITests
       - ManifoldUITests/UITestHelpers.swift
     dependencies:
-      - target: ManifoldStudio
+      - target: ManifoldMac
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.manifoldkit.ManifoldStudioUITests
+        PRODUCT_BUNDLE_IDENTIFIER: com.manifoldkit.ManifoldMacUITests
         SWIFT_VERSION: "6.0"
         GENERATE_INFOPLIST_FILE: YES
 
@@ -149,20 +152,20 @@ schemes:
       config: Debug
     archive:
       config: Release
-  ManifoldStudio:
+  ManifoldMac:
     build:
       targets:
-        ManifoldStudio: all
-        ManifoldStudioUITests: [test]
+        ManifoldMac: all
+        ManifoldMacUITests: [test]
     test:
       targets:
-        - ManifoldStudioUITests
+        - ManifoldMacUITests
       environmentVariables:
-        MANIFOLD_STUDIO_REAL_MODEL_TEST: "$(MANIFOLD_STUDIO_REAL_MODEL_TEST)"
-        MANIFOLD_STUDIO_REAL_MLX_MODEL_PATH: "$(MANIFOLD_STUDIO_REAL_MLX_MODEL_PATH)"
-        MANIFOLD_STUDIO_REAL_GGUF_MODEL_PATH: "$(MANIFOLD_STUDIO_REAL_GGUF_MODEL_PATH)"
-        MANIFOLD_STUDIO_REAL_MLX_MODEL_BYTES: "$(MANIFOLD_STUDIO_REAL_MLX_MODEL_BYTES)"
-        MANIFOLD_STUDIO_REAL_GGUF_MODEL_BYTES: "$(MANIFOLD_STUDIO_REAL_GGUF_MODEL_BYTES)"
+        MANIFOLD_MAC_REAL_MODEL_TEST: "$(MANIFOLD_MAC_REAL_MODEL_TEST)"
+        MANIFOLD_MAC_REAL_MLX_MODEL_PATH: "$(MANIFOLD_MAC_REAL_MLX_MODEL_PATH)"
+        MANIFOLD_MAC_REAL_GGUF_MODEL_PATH: "$(MANIFOLD_MAC_REAL_GGUF_MODEL_PATH)"
+        MANIFOLD_MAC_REAL_MLX_MODEL_BYTES: "$(MANIFOLD_MAC_REAL_MLX_MODEL_BYTES)"
+        MANIFOLD_MAC_REAL_GGUF_MODEL_BYTES: "$(MANIFOLD_MAC_REAL_GGUF_MODEL_BYTES)"
     run:
       config: Debug
     archive:
