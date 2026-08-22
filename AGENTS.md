@@ -1,17 +1,27 @@
 # manifold-apps — guide for AI coding assistants
 
-Two SwiftUI apps sharing one repo: **Manifold** (iOS 18+, consumer chat) and
-**ManifoldStudio** (macOS 15+, pro showcase). Both consume ManifoldKit by
+Two native SwiftUI targets implement the flagship **Manifold** reference app:
+`Manifold` for iOS 18+ and `ManifoldMac` for macOS 15+. Both consume ManifoldKit by
 published tag (`https://github.com/ManifoldKit/ManifoldKit`, pinned
 `upToNextMinor` from a released version — see `project.yml`). Core
 ManifoldKit conventions (bootstrap recipe, sending messages, theming, tool
 calling, concurrency rules) live in ManifoldKit's own `AGENTS.md` — this file
 covers only what's specific to manifold-apps.
 
+## Product direction
+
+ManifoldKit and its companion packages are the product; these applications are
+executable documentation. A future **Manifold Studio** will be a dedicated
+SwiftPM server daemon plus browser workbench for advanced public ManifoldKit,
+companion, benchmark, and external `manifold-eval` surfaces. It is not the
+current macOS SwiftUI target, a second inference implementation, or an eval
+authority. See `docs/plans/manifold-and-studio.md` for the accepted boundaries,
+spike evidence, upstream prerequisites, and staged backlog.
+
 ## Layout
 
 - `Mobile/` — the `Manifold` iOS app target (`ManifoldApp.swift`).
-- `Studio/` — the `ManifoldStudio` macOS app target (`ManifoldStudioApp.swift`).
+- `Mac/` — the `ManifoldMac` macOS app target (`ManifoldMacApp.swift`).
 - `Shared/` — code shared by both targets: `App/` (the `AppEnvironment`
   composition root, the `AppFeature` protocol seam, `RootView`, per-platform
   feature registries), `Features/` (one stub directory per feature — later
@@ -22,13 +32,15 @@ covers only what's specific to manifold-apps.
 - `project.yml` — XcodeGen spec. The generated `Manifold.xcodeproj` is
   **gitignored** (basechat precedent) — regenerate with `make generate`
   whenever `project.yml`, target sources, or dependencies change.
+- `docs/plans/manifold-and-studio.md` — accepted product definition, target
+  architecture, spike findings, dependency order, and issue-ready backlog.
 
 ## Build & test
 
 ```bash
 make generate   # xcodegen generate
 make build      # builds both schemes (iOS Simulator + macOS), CODE_SIGNING_ALLOWED=NO
-make test       # runs the complete Manifold + ManifoldStudio UI-test targets
+make test       # runs the complete Manifold + ManifoldMac UI-test targets
 make device-test IOS_DEVICE_ID=... DEVELOPMENT_TEAM=... # real Foundation physical gate
 make clean      # removes the generated project + build artifacts
 ```
@@ -73,3 +85,9 @@ the device-only evidence from running.
   `DerivedData/`, `.build/`, and `Package.resolved` are all gitignored —
   regenerate locally with `make generate` after any `project.yml` change; CI
   regenerates it fresh on every run.
+- **A missing optional Metal toolchain fails before app compilation.** If
+  `MLXMetallibPlugin` reports that the Metal toolchain is unavailable, reproduce
+  against the unchanged baseline, then install the Xcode component with
+  `xcodebuild -downloadComponent MetalToolchain`. That repaired the failure on
+  Xcode 26.6; the subsequent full iOS and macOS build is the authoritative
+  proof.

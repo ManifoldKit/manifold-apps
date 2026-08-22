@@ -5,7 +5,7 @@ import ManifoldTools
 import ManifoldMLX
 import ManifoldLlama
 
-/// The composition root shared by `Manifold` (iOS) and `ManifoldStudio`
+/// The composition root shared by `Manifold` (iOS and macOS)
 /// (macOS): owns the bootstrapped ManifoldKit stack (inference, persistence,
 /// session management) plus the one piece of cross-feature UI state every
 /// feature can read — the active theme.
@@ -70,7 +70,7 @@ final class AppEnvironment {
     /// `InferenceService` initializer marks the model loaded immediately (no
     /// `loadModel` step), so the composer is enabled as soon as bootstrap
     /// finishes — no `dispatchSelectedLoad()` call is needed on that path,
-    /// unlike the live-backend path below. `--studio-real-model-test` is the
+    /// unlike the live-backend path below. `--mac-real-model-test` is the
     /// explicit exception: it uses the same in-memory store for isolation but
     /// always constructs and registers the production backends.
     ///
@@ -89,9 +89,9 @@ final class AppEnvironment {
         bundleIdentifier: String
     ) async throws -> AppEnvironment {
         let isUITesting = LaunchArguments.isUITesting
-        let runsStudioRealModelTest = LaunchArguments.runsStudioRealModelTest
+        let runsMacRealModelTest = LaunchArguments.runsMacRealModelTest
         let runsIOSRealFoundationTest = LaunchArguments.runsIOSRealFoundationTest
-        let usesEphemeralStore = isUITesting || runsStudioRealModelTest
+        let usesEphemeralStore = isUITesting || runsMacRealModelTest
         let configuration = ManifoldConfiguration(appName: appName, bundleIdentifier: bundleIdentifier)
 
         // Consume the cross-process App Group slot before bootstrap work. Its
@@ -113,8 +113,8 @@ final class AppEnvironment {
 
         let inferenceService: InferenceService
         if isUITesting
-            && !LaunchArguments.runsStudioLocalModelTest
-            && !runsStudioRealModelTest
+            && !LaunchArguments.runsMacLocalModelTest
+            && !runsMacRealModelTest
             && !runsIOSRealFoundationTest {
             let backend: any InferenceBackend
             let backendName: String
@@ -170,20 +170,20 @@ final class AppEnvironment {
         )
 
         if !isUITesting
-            || LaunchArguments.runsStudioLocalModelTest
-            || runsStudioRealModelTest
+            || LaunchArguments.runsMacLocalModelTest
+            || runsMacRealModelTest
             || runsIOSRealFoundationTest {
             OllamaBackends.register(with: inferenceService)
             CloudSaaSBackends.register(with: inferenceService)
             FoundationBackends.register(with: inferenceService)
             #if os(macOS)
             // Keep this factory ahead of the companion registrars. The core
-            // lifecycle asks factories in registration order, so the Studio UI
+            // lifecycle asks factories in registration order, so the Mac UI
             // suite drives its normal local-model load path with a deterministic
             // ScriptedBackend rather than constructing MLX/llama engines or
             // touching fixture paths. The real registrars still follow, proving
             // the production companion wiring can coexist with that test seam.
-            if LaunchArguments.runsStudioLocalModelTest {
+            if LaunchArguments.runsMacLocalModelTest {
                 inferenceService.registerBackendFactory { modelType in
                     switch modelType {
                     case .mlx, .gguf:
@@ -209,7 +209,7 @@ final class AppEnvironment {
         // Without this provider the registry cannot discover Foundation at
         // all, even on a supported device with Apple Intelligence enabled.
         #if canImport(FoundationModels)
-        if (!isUITesting || runsStudioRealModelTest || runsIOSRealFoundationTest),
+        if (!isUITesting || runsMacRealModelTest || runsIOSRealFoundationTest),
            #available(macOS 26, iOS 26, *) {
             viewModel.modelRegistry.foundationModelProvider = {
                 FoundationBackend.isAvailable
@@ -217,7 +217,7 @@ final class AppEnvironment {
         }
         #endif
 
-        if runsStudioRealModelTest {
+        if runsMacRealModelTest {
             // The hardware gate validates the two paths before launch and
             // injects their parsed production ModelInfo values directly. Do
             // not scan the maintainer's entire model library on the main actor
@@ -226,24 +226,24 @@ final class AppEnvironment {
             // gate from starting. Normal launches still exercise discovery in
             // the `!isUITesting` startup branch below.
             do {
-                let discovered = try Self.studioRealModelInfos(
-                    mlxURL: LaunchArguments.studioRealMLXModelURL,
-                    ggufURL: LaunchArguments.studioRealGGUFModelURL,
-                    mlxBytes: LaunchArguments.studioRealMLXModelBytes,
-                    ggufBytes: LaunchArguments.studioRealGGUFModelBytes
+                let discovered = try Self.macRealModelInfos(
+                    mlxURL: LaunchArguments.macRealMLXModelURL,
+                    ggufURL: LaunchArguments.macRealGGUFModelURL,
+                    mlxBytes: LaunchArguments.macRealMLXModelBytes,
+                    ggufBytes: LaunchArguments.macRealGGUFModelBytes
                 )
                 viewModel.modelRegistry.availableModels = discovered
             } catch {
-                viewModel.errorMessage = "Could not discover Studio real-test models: \(error.localizedDescription)"
-                Log.inference.error("Studio real-model discovery failed: \(String(describing: error), privacy: .public)")
+                viewModel.errorMessage = "Could not discover Manifold Mac real-test models: \(error.localizedDescription)"
+                Log.inference.error("Manifold Mac real-model discovery failed: \(String(describing: error), privacy: .public)")
             }
-        } else if LaunchArguments.runsStudioLocalModelTest {
+        } else if LaunchArguments.runsMacLocalModelTest {
             // The fixture lives only in the test registry; no files are created
             // and `ScriptedBackend.loadModel` deliberately ignores these URLs.
             // Both formats must be visibly compatible before the UI can prove
             // that RootView dispatches a real load rather than only selecting a
             // switcher row.
-            viewModel.modelRegistry.availableModels = Self.studioLocalModelFixtures
+            viewModel.modelRegistry.availableModels = Self.macLocalModelFixtures
         }
 
         // `ChatViewModel` does not fetch the consumer-owned EndpointStore
@@ -284,7 +284,7 @@ final class AppEnvironment {
             // ModelInfo discovery parses GGUF metadata and sizes MLX trees.
             // ModelRegistry's async API performs that filesystem work away
             // from the main actor so a real local catalogue cannot freeze the
-            // Studio launch window before RootView appears.
+            // Mac launch window before RootView appears.
             do {
                 try await viewModel.modelRegistry.refreshAsync()
             } catch {
@@ -366,21 +366,21 @@ final class AppEnvironment {
     }
 
     /// Small, deterministic local-model catalogue used exclusively by the
-    /// Studio macOS UI target. Tiny declared sizes keep the genuine load-plan
+    /// macOS UI target. Tiny declared sizes keep the genuine load-plan
     /// path in its allowed state while never requiring an actual model asset.
-    private static var studioLocalModelFixtures: [ModelInfo] {
+    private static var macLocalModelFixtures: [ModelInfo] {
         [
             ModelInfo(
-                name: "Studio Fixture MLX",
-                fileName: "studio-fixture-mlx",
-                url: URL(fileURLWithPath: "/tmp/manifold-studio-fixture-mlx"),
+                name: "Mac Fixture MLX",
+                fileName: "mac-fixture-mlx",
+                url: URL(fileURLWithPath: "/tmp/manifold-mac-fixture-mlx"),
                 fileSize: 1,
                 modelType: .mlx
             ),
             ModelInfo(
-                name: "Studio Fixture GGUF",
-                fileName: "studio-fixture-gguf.gguf",
-                url: URL(fileURLWithPath: "/tmp/manifold-studio-fixture-gguf.gguf"),
+                name: "Mac Fixture GGUF",
+                fileName: "mac-fixture-gguf.gguf",
+                url: URL(fileURLWithPath: "/tmp/manifold-mac-fixture-gguf.gguf"),
                 fileSize: 1,
                 modelType: .gguf
             ),
@@ -391,24 +391,24 @@ final class AppEnvironment {
     /// assets without parsing either model before RootView exists. The real
     /// companion backends remain responsible for their authoritative format
     /// and metadata checks when the user selects each row.
-    private static func studioRealModelInfos(
+    private static func macRealModelInfos(
         mlxURL: URL,
         ggufURL: URL,
         mlxBytes: UInt64?,
         ggufBytes: UInt64?
     ) throws -> [ModelInfo] {
         guard let mlxBytes, let ggufBytes else {
-            throw StudioRealModelDiscoveryError.missingValidatedSizes
+            throw MacRealModelDiscoveryError.missingValidatedSizes
         }
         let mlx = ModelInfo(
-            name: Self.studioRealDisplayName(for: mlxURL, stripsExtension: false),
+            name: Self.macRealDisplayName(for: mlxURL, stripsExtension: false),
             fileName: mlxURL.lastPathComponent,
             url: mlxURL,
             fileSize: mlxBytes,
             modelType: .mlx
         )
         let gguf = ModelInfo(
-            name: Self.studioRealDisplayName(for: ggufURL, stripsExtension: true),
+            name: Self.macRealDisplayName(for: ggufURL, stripsExtension: true),
             fileName: ggufURL.lastPathComponent,
             url: ggufURL,
             fileSize: ggufBytes,
@@ -417,7 +417,7 @@ final class AppEnvironment {
         return [mlx, gguf]
     }
 
-    private static func studioRealDisplayName(for url: URL, stripsExtension: Bool) -> String {
+    private static func macRealDisplayName(for url: URL, stripsExtension: Bool) -> String {
         let rawName = stripsExtension
             ? (url.lastPathComponent as NSString).deletingPathExtension
             : url.lastPathComponent
@@ -427,13 +427,13 @@ final class AppEnvironment {
     }
 }
 
-private enum StudioRealModelDiscoveryError: LocalizedError {
+private enum MacRealModelDiscoveryError: LocalizedError {
     case missingValidatedSizes
 
     var errorDescription: String? {
         switch self {
         case .missingValidatedSizes:
-            "The Studio real-model gate did not provide validated model byte sizes."
+            "The Manifold Mac real-model gate did not provide validated model byte sizes."
         }
     }
 }

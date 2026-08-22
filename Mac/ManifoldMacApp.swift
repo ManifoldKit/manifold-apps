@@ -2,14 +2,14 @@ import SwiftUI
 import SwiftData // needed for .modelContainer modifier type inference
 import ManifoldKit
 
-/// Manifold Studio — the macOS pro showcase app (macOS 15+).
+/// Manifold — the macOS app (macOS 15+).
 ///
 /// Builds the shared `AppEnvironment` composition root and shows
 /// `RootView`. Under `--uitesting`, `AppEnvironment.bootstrap` swaps in a
 /// deterministic `ScriptedBackend` and an in-memory store — see
 /// `Shared/App/AppEnvironment.swift`.
 @main
-struct ManifoldStudioApp: App {
+struct ManifoldMacApp: App {
     @State private var env: AppEnvironment?
     @State private var startupError: Error?
 
@@ -36,9 +36,9 @@ struct ManifoldStudioApp: App {
     private func start() async {
         do {
             env = try await AppEnvironment.bootstrap(
-                storeName: "ManifoldStudio",
-                appName: "Manifold Studio",
-                bundleIdentifier: "com.manifoldkit.ManifoldStudio"
+                storeName: "ManifoldMac",
+                appName: "Manifold",
+                bundleIdentifier: "com.manifoldkit.Manifold"
             )
         } catch {
             self.startupError = error

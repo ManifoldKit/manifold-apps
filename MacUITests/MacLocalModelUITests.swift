@@ -4,15 +4,15 @@ import XCTest
 /// MLX/GGUF loads for ScriptedBackend only under this explicit launch argument,
 /// so the test exercises the production model-switcher and load dispatch
 /// without downloading or allocating a real model.
-final class StudioLocalModelUITests: XCTestCase {
-    private let mlxFixtureName = "Studio Fixture MLX"
-    private let ggufFixtureName = "Studio Fixture GGUF"
+final class MacLocalModelUITests: XCTestCase {
+    private let mlxFixtureName = "Mac Fixture MLX"
+    private let ggufFixtureName = "Mac Fixture GGUF"
 
     private var app: XCUIApplication!
 
     override func setUpWithError() throws {
         continueAfterFailure = false
-        app = launchApp(additionalArguments: ["--studio-local-model-test"])
+        app = launchApp(additionalArguments: ["--mac-local-model-test"])
         openChatDetailIfNeeded(app: app)
     }
 
@@ -21,7 +21,7 @@ final class StudioLocalModelUITests: XCTestCase {
         let button = app.descendants(matching: .any)["chat-model-management-button"]
         XCTAssertTrue(
             waitForHittable(button, timeout: 10),
-            "The central chat model-management button should be reachable on Studio"
+            "The central chat model-management button should be reachable on Manifold Mac"
         )
         button.tap()
 
@@ -77,7 +77,7 @@ final class StudioLocalModelUITests: XCTestCase {
             NSPredicate(format: "label CONTAINS[c] 'More' OR value CONTAINS[c] 'More'")
         )
         guard let more = firstHittable(in: moreQuery, timeout: 10) else {
-            XCTFail("Studio ChatView model switcher is neither directly tappable nor reachable through the More toolbar overflow")
+            XCTFail("Manifold Mac ChatView model switcher is neither directly tappable nor reachable through the More toolbar overflow")
             return
         }
         more.tap()

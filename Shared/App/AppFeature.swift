@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// One entry in the platform feature registries (``MobileFeatureRegistry``,
-/// ``StudioFeatureRegistry``). Each conforming type is a self-contained
+/// ``MacFeatureRegistry``). Each conforming type is a self-contained
 /// surface ``RootView`` can navigate to from the sidebar — a tool-calling
 /// scenario runner, a cloud endpoint manager, an MCP client, and so on.
 ///

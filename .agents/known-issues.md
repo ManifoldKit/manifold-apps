@@ -80,7 +80,7 @@ build settings and entitlement intermediate; exercise the store/read/buffer
 logic in-process on the simulator, and do not describe that test as
 cross-process App Group proof.
 
-## Studio real-model UI tests must stage models outside Documents and await a terminal turn
+## Manifold Mac real-model UI tests must stage models outside Documents and await a terminal turn
 
 A macOS XCUITest app can remain on its loading screen while the main actor is
 blocked in `NSURLDirectoryEnumerator` / `__open` against the maintainer's
@@ -121,6 +121,6 @@ test can also persist an intentional all-windows-closed state, leaving only the
 app menu bar after relaunch. Launch with `-ApplePersistenceIgnoreState YES`,
 send Command-N when no app window appears, then tap an inert point in the tested
 window's title region and assert foreground state before interacting with
-controls. In ManifoldStudio, normalized x=0.3 is the title; x=0.5 hits the
+controls. In the macOS Manifold app, normalized x=0.3 is the title; x=0.5 hits the
 model-switcher chip and opens its popover, so a generic title-center click
 introduces a different test failure.

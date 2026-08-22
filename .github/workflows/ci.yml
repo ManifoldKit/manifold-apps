@@ -25,6 +25,6 @@ jobs:
     with:
       mode: xcodegen
       project: Manifold.xcodeproj
-      scheme: ManifoldStudio
+      scheme: ManifoldMac
       destination: "platform=macOS"
       run-tests: true
