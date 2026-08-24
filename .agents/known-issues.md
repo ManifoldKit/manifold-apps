@@ -124,3 +124,33 @@ window's title region and assert foreground state before interacting with
 controls. In the macOS Manifold app, normalized x=0.3 is the title; x=0.5 hits the
 model-switcher chip and opens its popover, so a generic title-center click
 introduces a different test failure.
+
+## Repeated ManifoldMac hardware runs can fail codesign on an unsigned MLX metallib
+
+After a successful macOS real-model test, Xcode's MLX build plugin can leave an
+incremental `ManifoldMac.app` product whose bundled `mlx.metallib` is no longer
+covered by a valid code signature. The next run then fails before tests start
+with a nested-code signing error even though no source or package revision
+changed. Run a scheme-scoped `xcodebuild clean` before each hardware-gate build;
+this preserves resolved package downloads while rebuilding and signing the app
+bundle consistently.
+
+## A hosted unit-test target must not also link ManifoldTools directly
+
+When `ManifoldMacIntegrationTests` is hosted by the app and also declares a
+direct `ManifoldTools` package dependency, XCTest loads two copies of every
+ManifoldTools Objective-C-visible class: one from the host app and one from the
+test bundle. Runtime duplicate-class warnings can progress to a test-process
+restart or crash. Keep the real-model scenario executor in the app module and
+let the hosted test access it through `@testable import Manifold`; do not add
+the same package product to the hosted test target.
+
+## A cancelled local generation needs sustained idle before the next matrix cell
+
+Immediately after `InferenceService.stopGeneration()`, `isGenerating` can
+briefly report false before continuation cleanup makes it true again. Treating
+that first false sample as quiescence lets the next matrix cell fail with
+`another generation is in progress`. After cancelling a timed-out cell, require
+ten consecutive 100 ms idle samples (with a bounded overall wait) before
+returning the timeout result. This makes every cell independent and keeps a
+pathological model response from poisoning the rest of the qualification run.
