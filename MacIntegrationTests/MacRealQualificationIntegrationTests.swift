@@ -1,5 +1,3 @@
-import ManifoldInference
-import ManifoldTools
 import XCTest
 @testable import Manifold
 
@@ -31,13 +29,6 @@ final class MacRealQualificationIntegrationTests: XCTestCase {
         )
         ToolsFeature.install(into: env)
 
-        let scenarios = try LocalQualificationCorpus.load()
-        XCTAssertEqual(
-            scenarios.map(\.id),
-            LocalQualificationCorpus.IDs,
-            "The published ManifoldTools corpus must contain every app qualification scenario"
-        )
-
         var failures: [String] = []
         for model in env.viewModel.modelRegistry.availableModels {
             env.viewModel.selectedModel = model
@@ -49,27 +40,23 @@ final class MacRealQualificationIntegrationTests: XCTestCase {
             ToolsFeature.updateAdvertisement(in: env)
 
             for repeatIndex in 1...2 {
-                for scenario in scenarios {
+                for scenarioID in LocalQualificationCorpus.IDs {
                     do {
-                        let outcome = try await run(
-                            scenario,
-                            service: env.bootstrap.inferenceService
+                        let outcome = try await LocalQualificationExecutor.run(
+                            scenarioID: scenarioID,
+                            using: env,
+                            timeoutSeconds: cellTimeoutSeconds
                         )
                         if !outcome.passed {
-                            let failedAssertions = outcome.assertions
-                                .filter { !$0.passed }
-                                .map(\.message)
-                                .joined(separator: "; ")
-                            let toolResults = outcome.toolResults.map {
-                                "\($0.toolName)=\(Self.diagnosticText($0.content))"
-                            }
+                            let failedAssertions = outcome.failedAssertions.joined(separator: "; ")
+                            let toolResults = outcome.toolResults.map(Self.diagnosticText)
                             failures.append(
-                                "\(model.modelType.rawValue)/\(model.name)/\(scenario.id)/repeat-\(repeatIndex): \(failedAssertions); tools=\(outcome.toolCallsExecuted); results=\(toolResults); final=\(Self.diagnosticText(outcome.finalAnswer))"
+                                "\(model.modelType.rawValue)/\(model.name)/\(scenarioID)/repeat-\(repeatIndex): \(failedAssertions); tools=\(outcome.toolCalls); results=\(toolResults); final=\(Self.diagnosticText(outcome.finalAnswer))"
                             )
                         }
                     } catch {
                         failures.append(
-                            "\(model.modelType.rawValue)/\(model.name)/\(scenario.id)/repeat-\(repeatIndex): \(error.localizedDescription)"
+                            "\(model.modelType.rawValue)/\(model.name)/\(scenarioID)/repeat-\(repeatIndex): \(error.localizedDescription)"
                         )
                     }
                 }
@@ -95,62 +82,4 @@ final class MacRealQualificationIntegrationTests: XCTestCase {
         return String(flattened.prefix(400))
     }
 
-    private func run(
-        _ scenario: Scenario,
-        service: InferenceService
-    ) async throws -> ScenarioRunner.Outcome {
-        var timedOut = false
-        let timeout = cellTimeoutSeconds
-        let timeoutTask = Task { @MainActor in
-            do {
-                try await Task.sleep(for: .seconds(timeout))
-            } catch {
-                return
-            }
-            timedOut = true
-            service.stopGeneration()
-        }
-        defer { timeoutTask.cancel() }
-
-        let result: Result<ScenarioRunner.Outcome, Error>
-        do {
-            result = .success(try await ScenarioRunner(service: service).run(scenario))
-        } catch {
-            result = .failure(error)
-        }
-
-        if timedOut {
-            guard await waitForGenerationToSettle(service: service) else {
-                throw QualificationError.cancellationDidNotSettle(seconds: timeout)
-            }
-            throw QualificationError.cellTimedOut(seconds: timeout)
-        }
-        return try result.get()
-    }
-
-    private func waitForGenerationToSettle(service: InferenceService) async -> Bool {
-        for _ in 0..<100 {
-            if !service.isGenerating { return true }
-            do {
-                try await Task.sleep(for: .milliseconds(100))
-            } catch {
-                return false
-            }
-        }
-        return !service.isGenerating
-    }
-}
-
-private enum QualificationError: LocalizedError {
-    case cellTimedOut(seconds: Double)
-    case cancellationDidNotSettle(seconds: Double)
-
-    var errorDescription: String? {
-        switch self {
-        case .cellTimedOut(let seconds):
-            "Qualification cell exceeded \(seconds.formatted()) seconds and generation was cancelled."
-        case .cancellationDidNotSettle(let seconds):
-            "Qualification cell exceeded \(seconds.formatted()) seconds, but generation did not settle within 10 seconds of cancellation."
-        }
-    }
 }

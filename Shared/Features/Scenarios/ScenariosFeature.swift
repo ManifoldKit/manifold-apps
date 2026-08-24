@@ -34,6 +34,99 @@ enum LocalQualificationCorpus {
         let byID = Dictionary(uniqueKeysWithValues: loaded.map { ($0.id, $0) })
         return IDs.compactMap { byID[$0] }
     }
+
+    static func scenario(id: String) throws -> Scenario {
+        guard let scenario = try load().first(where: { $0.id == id }) else {
+            throw LocalQualificationError.missingScenario(id: id)
+        }
+        return scenario
+    }
+}
+
+struct LocalQualificationOutcome {
+    let passed: Bool
+    let failedAssertions: [String]
+    let toolCalls: [String]
+    let toolResults: [String]
+    let finalAnswer: String
+}
+
+/// Runs one bounded corpus cell through the same app-owned service the UI
+/// uses. Keeping this wrapper in the host module prevents integration tests
+/// from linking a second copy of ManifoldTools beside the app's copy.
+@MainActor
+enum LocalQualificationExecutor {
+    static func run(
+        scenarioID: String,
+        using env: AppEnvironment,
+        timeoutSeconds: Double
+    ) async throws -> LocalQualificationOutcome {
+        let scenario = try LocalQualificationCorpus.scenario(id: scenarioID)
+        let service = env.bootstrap.inferenceService
+        var timedOut = false
+        let timeoutTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .seconds(timeoutSeconds))
+            } catch {
+                return
+            }
+            timedOut = true
+            service.stopGeneration()
+        }
+        defer { timeoutTask.cancel() }
+
+        let result: Result<ScenarioRunner.Outcome, Error>
+        do {
+            result = .success(try await ScenarioRunner(service: service).run(scenario))
+        } catch {
+            result = .failure(error)
+        }
+
+        if timedOut {
+            guard await waitForGenerationToSettle(service: service) else {
+                throw LocalQualificationError.cancellationDidNotSettle(seconds: timeoutSeconds)
+            }
+            throw LocalQualificationError.cellTimedOut(seconds: timeoutSeconds)
+        }
+
+        let outcome = try result.get()
+        return LocalQualificationOutcome(
+            passed: outcome.passed,
+            failedAssertions: outcome.assertions.filter { !$0.passed }.map(\.message),
+            toolCalls: outcome.toolCallsExecuted,
+            toolResults: outcome.toolResults.map { "\($0.toolName)=\($0.content)" },
+            finalAnswer: outcome.finalAnswer
+        )
+    }
+
+    private static func waitForGenerationToSettle(service: InferenceService) async -> Bool {
+        for _ in 0..<100 {
+            if !service.isGenerating { return true }
+            do {
+                try await Task.sleep(for: .milliseconds(100))
+            } catch {
+                return false
+            }
+        }
+        return !service.isGenerating
+    }
+}
+
+private enum LocalQualificationError: LocalizedError {
+    case missingScenario(id: String)
+    case cellTimedOut(seconds: Double)
+    case cancellationDidNotSettle(seconds: Double)
+
+    var errorDescription: String? {
+        switch self {
+        case .missingScenario(let id):
+            "The published qualification corpus is missing scenario '\(id)'."
+        case .cellTimedOut(let seconds):
+            "Qualification cell exceeded \(seconds.formatted()) seconds and generation was cancelled."
+        case .cancellationDidNotSettle(let seconds):
+            "Qualification cell exceeded \(seconds.formatted()) seconds, but generation did not settle within 10 seconds of cancellation."
+        }
+    }
 }
 
 @MainActor

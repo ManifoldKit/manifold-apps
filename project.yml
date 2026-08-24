@@ -146,8 +146,6 @@ targets:
       - MacIntegrationTests
     dependencies:
       - target: ManifoldMac
-      - package: ManifoldKit
-        product: ManifoldTools
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.manifoldkit.ManifoldMacIntegrationTests
