@@ -29,8 +29,23 @@ final class MacRealQualificationIntegrationTests: XCTestCase {
         )
         ToolsFeature.install(into: env)
 
+        let models = env.viewModel.modelRegistry.availableModels
+        let expectedModelCount = 2
+        guard models.count == expectedModelCount,
+              models.filter({ $0.modelType == .mlx }).count == 1,
+              models.filter({ $0.modelType == .gguf }).count == 1 else {
+            let inventory = models
+                .map { "\($0.modelType.rawValue)/\($0.name)" }
+                .joined(separator: ", ")
+            XCTFail(
+                "Hardware qualification requires exactly one MLX and one GGUF model; discovered [\(inventory)]"
+            )
+            return
+        }
+
         var failures: [String] = []
-        for model in env.viewModel.modelRegistry.availableModels {
+        var executedCellCount = 0
+        for model in models {
             env.viewModel.selectedModel = model
             await env.viewModel.loadSelectedModel()
             guard env.viewModel.isModelLoaded else {
@@ -41,6 +56,7 @@ final class MacRealQualificationIntegrationTests: XCTestCase {
 
             for repeatIndex in 1...2 {
                 for scenarioID in LocalQualificationCorpus.IDs {
+                    executedCellCount += 1
                     do {
                         let outcome = try await LocalQualificationExecutor.run(
                             scenarioID: scenarioID,
@@ -69,6 +85,11 @@ final class MacRealQualificationIntegrationTests: XCTestCase {
         env.viewModel.unloadModel()
         try await Task.sleep(for: .seconds(1))
 
+        XCTAssertEqual(
+            executedCellCount,
+            expectedModelCount * 2 * LocalQualificationCorpus.IDs.count,
+            "Hardware qualification must execute every model/repeat/scenario cell."
+        )
         XCTAssertTrue(
             failures.isEmpty,
             "Every app-level local-inference qualification cell should pass:\n\(failures.joined(separator: "\n"))"
