@@ -50,8 +50,11 @@ final class MacRealQualificationIntegrationTests: XCTestCase {
                                 .filter { !$0.passed }
                                 .map(\.message)
                                 .joined(separator: "; ")
+                            let toolResults = outcome.toolResults.map {
+                                "\($0.toolName)=\(Self.diagnosticText($0.content))"
+                            }
                             failures.append(
-                                "\(model.modelType.rawValue)/\(model.name)/\(scenario.id)/repeat-\(repeatIndex): \(failedAssertions); tools=\(outcome.toolCallsExecuted); final=\(Self.diagnosticText(outcome.finalAnswer))"
+                                "\(model.modelType.rawValue)/\(model.name)/\(scenario.id)/repeat-\(repeatIndex): \(failedAssertions); tools=\(outcome.toolCallsExecuted); results=\(toolResults); final=\(Self.diagnosticText(outcome.finalAnswer))"
                             )
                         }
                     } catch {
