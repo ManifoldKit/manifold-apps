@@ -51,7 +51,7 @@ final class MacRealQualificationIntegrationTests: XCTestCase {
                                 .map(\.message)
                                 .joined(separator: "; ")
                             failures.append(
-                                "\(model.modelType.rawValue)/\(model.name)/\(scenario.id)/repeat-\(repeatIndex): \(failedAssertions)"
+                                "\(model.modelType.rawValue)/\(model.name)/\(scenario.id)/repeat-\(repeatIndex): \(failedAssertions); tools=\(outcome.toolCallsExecuted); final=\(Self.diagnosticText(outcome.finalAnswer))"
                             )
                         }
                     } catch {
@@ -63,9 +63,22 @@ final class MacRealQualificationIntegrationTests: XCTestCase {
             }
         }
 
+        // Companion backends own GPU resources whose teardown must finish
+        // before XCTest exits. Leaving the final GGUF loaded made llama.cpp's
+        // process-global Metal destructor assert after the verdict printed.
+        env.viewModel.unloadModel()
+        try await Task.sleep(for: .seconds(1))
+
         XCTAssertTrue(
             failures.isEmpty,
             "Every app-level local-inference qualification cell should pass:\n\(failures.joined(separator: "\n"))"
         )
+    }
+
+    private static func diagnosticText(_ text: String) -> String {
+        let flattened = text
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return String(flattened.prefix(400))
     }
 }
