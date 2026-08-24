@@ -99,6 +99,16 @@ cd "$REPO_ROOT"
 if ! xcodegen generate; then
   fail "XcodeGen failed to generate Manifold.xcodeproj."
 fi
+# MLX's build plugin places mlx.metallib inside the app bundle. After a test
+# invocation, that incremental product can remain unsigned and the next
+# codesign rejects the whole app before tests start. A scheme-scoped clean
+# preserves downloaded packages while making repeated hardware runs reliable.
+if ! xcodebuild clean \
+  -project Manifold.xcodeproj \
+  -scheme ManifoldMac \
+  -destination 'platform=macOS,arch=arm64'; then
+  fail "could not clean stale ManifoldMac hardware-gate products."
+fi
 MANIFOLD_MAC_REAL_MODEL_TEST=1 \
 MANIFOLD_MAC_REAL_QUALIFICATION_TEST="$QUALIFICATION_TEST" \
 MANIFOLD_MAC_REAL_MLX_MODEL_PATH="$STAGED_MLX_MODEL_PATH" \
