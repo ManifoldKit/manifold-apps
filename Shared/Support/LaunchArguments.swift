@@ -116,9 +116,14 @@ enum LaunchArguments {
         isUITesting && CommandLine.arguments.contains("--appintent-tool-turn")
     }
 
-    /// The value following `--scenario <id>`, if present. Reserved for the
-    /// future `ScenariosFeature` (mirrors core's `--bck-demo-scenario`);
-    /// unused until that feature is ported.
+    /// Makes the scripted backend return the canonical structured-output
+    /// answer used by the Scenarios feature's deterministic UI test.
+    static var runsScenarioQualificationTest: Bool {
+        isUITesting && CommandLine.arguments.contains("--scenario-qualification-test")
+    }
+
+    /// The value following `--scenario <id>`, if present. The Scenarios
+    /// feature uses it as the initial qualification selection.
     static var scenario: String? {
         value(after: "--scenario")
     }

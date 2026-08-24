@@ -349,6 +349,11 @@ final class AppEnvironment {
     /// turn loop treats as "no more tool calls, stop" rather than an error,
     /// so running out mid-session is harmless.
     private static var uiTestTurns: [ScriptedBackend.Turn] {
+        if LaunchArguments.runsScenarioQualificationTest {
+            return [
+                .tokens([#"{"invoice_id":"INV-754-CORE","total":123.45,"currency":"USD"}"#]),
+            ]
+        }
         if LaunchArguments.runsAppIntentToolTurn {
             return [
                 .toolCall(

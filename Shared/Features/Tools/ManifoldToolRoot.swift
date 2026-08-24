@@ -108,10 +108,25 @@ enum ManifoldToolRoot {
         and threads the ToolResult back into the conversation.
         """),
         ("shopping-list.txt", """
-        milk
-        eggs
-        coffee
-        olive oil
+        apples: 12.50
+        rice: 7.25
+        saffron: 41.00
+
+        Budget note: buy apples and rice; skip saffron.
+        """),
+        ("readmes/backend-a.md", """
+        # Backend A
+
+        Shared marker: DEMO-README-NONCE.
+
+        Backend A uses streaming tools for incremental tool-call arguments.
+        """),
+        ("readmes/backend-b.md", """
+        # Backend B
+
+        Shared marker: DEMO-README-NONCE.
+
+        Backend B uses batch tools for whole-call dispatch.
         """),
     ]
 

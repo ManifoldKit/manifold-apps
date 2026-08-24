@@ -1,4 +1,4 @@
-.PHONY: generate build test release-inputs device-test archive-ios testflight-upload mac-real-models clean
+.PHONY: generate build test release-inputs device-test archive-ios testflight-upload mac-real-models mac-real-qualification clean
 
 # Overridable so a host with no "iPhone 16" simulator installed (e.g. an
 # iPhone-17-generation-only Mac) can still `make build`/`make test` locally:
@@ -82,6 +82,11 @@ testflight-upload: release-inputs test device-test archive-ios
 # and installed model assets before invoking the complete Manifold Mac UI-test target.
 mac-real-models:
 	bash ./scripts/test-mac-real-models.sh
+
+# Extends the physical-hardware regression gate with two repetitions of the
+# app's curated local-inference qualification corpus on both supplied models.
+mac-real-qualification:
+	MANIFOLD_MAC_REAL_QUALIFICATION_TEST=1 bash ./scripts/test-mac-real-models.sh
 
 clean:
 	rm -rf Manifold.xcodeproj DerivedData .build .artifacts

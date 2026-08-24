@@ -15,6 +15,21 @@ The consumer chat app — a single-session `ChatView` wired up with
 
 The macOS-native Manifold build, targeting macOS 15+.
 
+## Local inference qualification
+
+The Scenarios sidebar feature runs a curated subset of ManifoldTools' shared
+corpus through the app's currently selected backend. It reports tool calls,
+assertion verdicts, final output, and elapsed time without creating a second
+inference loop. On Apple Silicon, the extended hardware lane exercises that
+surface twice against both an MLX model and a GGUF model:
+
+```bash
+make mac-real-qualification
+```
+
+Override `MANIFOLD_MAC_REAL_MLX_MODEL_PATH` and
+`MANIFOLD_MAC_REAL_GGUF_MODEL_PATH` to qualify another same-family pair.
+
 ## Building
 
 Both targets consume ManifoldKit by published tag (`upToNextMinor`, see
@@ -25,6 +40,7 @@ brew install xcodegen   # once, if you don't already have it
 make generate            # xcodegen generate -> Manifold.xcodeproj (gitignored)
 make build                # builds both schemes (iOS Simulator + macOS)
 make test                 # runs the complete iOS + macOS UI-test targets
+make mac-real-qualification # opt-in MLX + GGUF app-level scenario matrix
 ```
 
 See `AGENTS.md` for the full set of repo-specific conventions and

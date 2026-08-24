@@ -10,6 +10,7 @@ import XCTest
 /// after each switch.
 final class MacRealModelUITests: XCTestCase {
     private static let optInEnvironmentKey = "MANIFOLD_MAC_REAL_MODEL_TEST"
+    private static let qualificationEnvironmentKey = "MANIFOLD_MAC_REAL_QUALIFICATION_TEST"
     private static let mlxPathEnvironmentKey = "MANIFOLD_MAC_REAL_MLX_MODEL_PATH"
     private static let ggufPathEnvironmentKey = "MANIFOLD_MAC_REAL_GGUF_MODEL_PATH"
     private static let mlxBytesEnvironmentKey = "MANIFOLD_MAC_REAL_MLX_MODEL_BYTES"
@@ -82,26 +83,44 @@ final class MacRealModelUITests: XCTestCase {
     }
 
     @MainActor
+    func testLiveQualificationCorpusAcrossMLXAndGGUF() throws {
+        guard ProcessInfo.processInfo.environment[Self.qualificationEnvironmentKey] == "1" else {
+            throw XCTSkip(
+                "The extended qualification matrix is opt-in. Run make mac-real-qualification with the required models."
+            )
+        }
+
+        var failures: [String] = []
+        for (modelName, backend) in [(mlxModelName, "mlx"), (ggufModelName, "llama")] {
+            loadModel(modelName, backend: backend)
+            openQualificationFeature()
+
+            for repeatIndex in 1...2 {
+                for scenarioID in [
+                    "structured-json-extraction",
+                    "abstention-definition",
+                    "shopping-list-budget",
+                    "parallel-readme-comparison",
+                ] {
+                    let verdict = runQualificationScenario(scenarioID)
+                    if verdict != "Passed" {
+                        failures.append("\(backend)/\(modelName)/\(scenarioID)/repeat-\(repeatIndex): \(verdict)")
+                    }
+                }
+            }
+
+            openChatFeature()
+        }
+
+        XCTAssertTrue(
+            failures.isEmpty,
+            "Every app-level local-inference qualification cell should pass:\n\(failures.joined(separator: "\n"))"
+        )
+    }
+
+    @MainActor
     private func loadVerifyAndGenerate(model: String, backend: String, prompt: String) {
-        openModelSwitcher()
-        let switcher = app.descendants(matching: .any)["model-switcher-list"]
-        XCTAssertTrue(switcher.waitForExistence(timeout: 15), "Model switcher should open before selecting \(model)")
-
-        let row = descendant(in: switcher, containing: model)
-        XCTAssertTrue(
-            row.waitForExistence(timeout: 15) && row.isHittable,
-            "The discovered installed model should be selectable: \(model)"
-        )
-        row.tap()
-
-        // The macOS switcher is a popover that stays open after selection.
-        app.typeKey(.escape, modifierFlags: [])
-
-        XCTAssertTrue(
-            waitForChatInputReady(app: app, timeout: 300),
-            "Composer should become ready only after the real \(backend) model load completes"
-        )
-        assertSelectedModelChip(model: model, backend: backend)
+        loadModel(model, backend: backend)
 
         let assistantCountBefore = assistantBubbles().count
         guard let input = findMessageInput(app: app) else {
@@ -140,6 +159,82 @@ final class MacRealModelUITests: XCTestCase {
             waitForChatInputReady(app: app, timeout: 30),
             "Composer should return to an enabled, hittable state after the real \(backend) turn completes"
         )
+    }
+
+    @MainActor
+    private func loadModel(_ model: String, backend: String) {
+        openModelSwitcher()
+        let switcher = app.descendants(matching: .any)["model-switcher-list"]
+        XCTAssertTrue(switcher.waitForExistence(timeout: 15), "Model switcher should open before selecting \(model)")
+
+        let row = descendant(in: switcher, containing: model)
+        XCTAssertTrue(
+            row.waitForExistence(timeout: 15) && row.isHittable,
+            "The discovered installed model should be selectable: \(model)"
+        )
+        row.tap()
+
+        // The macOS switcher is a popover that stays open after selection.
+        app.typeKey(.escape, modifierFlags: [])
+
+        XCTAssertTrue(
+            waitForChatInputReady(app: app, timeout: 300),
+            "Composer should become ready only after the real \(backend) model load completes"
+        )
+        assertSelectedModelChip(model: model, backend: backend)
+    }
+
+    @MainActor
+    private func openQualificationFeature() {
+        let scenarios = app.staticTexts["Scenarios"]
+        XCTAssertTrue(
+            scenarios.waitForExistence(timeout: 10) && scenarios.isHittable,
+            "The macOS sidebar should expose the Scenarios qualification feature"
+        )
+        scenarios.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["qualification-view"].waitForExistence(timeout: 10),
+            "Scenarios should present the qualification surface"
+        )
+    }
+
+    @MainActor
+    private func openChatFeature() {
+        let chat = app.descendants(matching: .any)["chat-sidebar-row"]
+        XCTAssertTrue(chat.waitForExistence(timeout: 10) && chat.isHittable)
+        chat.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["chat-model-switcher-chip"].waitForExistence(timeout: 10))
+    }
+
+    @MainActor
+    private func runQualificationScenario(_ scenarioID: String) -> String {
+        let row = app.descendants(matching: .any)["qualification-scenario-\(scenarioID)"]
+        guard row.waitForExistence(timeout: 10), row.isHittable else {
+            return "scenario row unavailable"
+        }
+        row.tap()
+
+        let run = app.buttons["qualification-run-button"]
+        guard run.waitForExistence(timeout: 5), run.isEnabled, run.isHittable else {
+            return "run button unavailable"
+        }
+        run.tap()
+
+        let result = app.descendants(matching: .any)["qualification-result"]
+        guard result.waitForExistence(timeout: 5) else { return "result unavailable" }
+        let terminal = XCTNSPredicateExpectation(
+            predicate: NSPredicate(
+                format: "value CONTAINS[c] 'Passed' OR value CONTAINS[c] 'Failed' OR label CONTAINS[c] 'Passed' OR label CONTAINS[c] 'Failed'"
+            ),
+            object: result
+        )
+        guard XCTWaiter.wait(for: [terminal], timeout: 300) == .completed else {
+            return "timeout"
+        }
+        let rendered = [result.value as? String, result.label]
+            .compactMap { $0 }
+            .joined(separator: " ")
+        return rendered.localizedCaseInsensitiveContains("Passed") ? "Passed" : "Failed"
     }
 
     @MainActor
