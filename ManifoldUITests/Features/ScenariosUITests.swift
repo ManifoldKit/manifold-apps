@@ -11,7 +11,8 @@ final class ScenariosUITests: XCTestCase {
     func testQualificationScenarioRunsThroughTheLiveFeature() {
         app = launchApp(additionalArguments: [
             "--scenario-qualification-test",
-            "--scenario", "structured-json-extraction",
+            "--scenario-legacy-fixture-test",
+            "--scenario", "shopping-list-budget",
         ])
 
         openQualificationFeature()
@@ -24,8 +25,7 @@ final class ScenariosUITests: XCTestCase {
             "The package scenario runner should report the canonical scripted answer as passed"
         )
         XCTAssertTrue(
-            app.descendants(matching: .any)["qualification-final-answer"]
-                .waitForExistence(timeout: 5),
+            reveal(app.descendants(matching: .any)["qualification-final-answer"]),
             "A completed qualification must expose the observed final answer"
         )
     }
@@ -33,7 +33,7 @@ final class ScenariosUITests: XCTestCase {
     @MainActor
     func testQualificationFailureIsReportedRatherThanSilentlyPassing() {
         app = launchApp(additionalArguments: [
-            "--scenario", "structured-json-extraction",
+            "--scenario", "shopping-list-budget",
         ])
 
         openQualificationFeature()
@@ -46,8 +46,7 @@ final class ScenariosUITests: XCTestCase {
             "An answer that violates the shared corpus assertions must be visibly reported as failed"
         )
         XCTAssertTrue(
-            app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] 'missing' OR label CONTAINS[c] 'should'"))
-                .firstMatch.waitForExistence(timeout: 5),
+            reveal(app.descendants(matching: .any)["qualification-assertion-0"]),
             "The failed run should retain its assertion evidence"
         )
     }
@@ -69,5 +68,14 @@ final class ScenariosUITests: XCTestCase {
         let predicate = NSPredicate(format: "value CONTAINS[c] %@ OR label CONTAINS[c] %@", expected, expected)
         let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
         return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+    }
+
+    @MainActor
+    private func reveal(_ element: XCUIElement) -> Bool {
+        for _ in 0..<5 {
+            if element.exists { return true }
+            app.swipeUp()
+        }
+        return element.waitForExistence(timeout: 2)
     }
 }

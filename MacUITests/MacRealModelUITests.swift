@@ -97,8 +97,6 @@ final class MacRealModelUITests: XCTestCase {
 
             for repeatIndex in 1...2 {
                 for scenarioID in [
-                    "structured-json-extraction",
-                    "abstention-definition",
                     "shopping-list-budget",
                     "parallel-readme-comparison",
                 ] {

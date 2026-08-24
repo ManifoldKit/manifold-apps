@@ -31,13 +31,13 @@ private final class ScenarioQualificationModel {
         case cancelled
     }
 
-    /// A bounded cross-section of the shared ManifoldTools corpus: tool-free
-    /// structured output, abstention, a mixed two-tool chain, and repeated
-    /// same-tool dispatch. The source scenarios remain package resources, so
-    /// the app cannot drift a private copy of their prompts or assertions.
+    /// A bounded cross-section of the shared ManifoldTools corpus: a mixed
+    /// two-tool chain and repeated same-tool dispatch. Every curated scenario
+    /// declares its required tools, keeping the advertised schema count inside
+    /// the documented local-model ceiling rather than passing the full app
+    /// registry for tool-free scenarios. The source scenarios remain package
+    /// resources, so the app cannot drift a private copy of their assertions.
     private static let curatedIDs = [
-        "structured-json-extraction",
-        "abstention-definition",
         "shopping-list-budget",
         "parallel-readme-comparison",
     ]
@@ -220,12 +220,13 @@ private struct ScenarioQualificationView: View {
                     }
 
                     Section("Assertions") {
-                        ForEach(Array(outcome.assertions.enumerated()), id: \.offset) { _, assertion in
+                        ForEach(Array(outcome.assertions.enumerated()), id: \.offset) { index, assertion in
                             Label(
                                 assertion.message,
                                 systemImage: assertion.passed ? "checkmark.circle.fill" : "xmark.circle.fill"
                             )
                             .foregroundStyle(assertion.passed ? Color.green : Color.red)
+                            .accessibilityIdentifier("qualification-assertion-\(index)")
                         }
                     }
 
@@ -246,6 +247,11 @@ private struct ScenarioQualificationView: View {
             }
             .navigationTitle("Local Inference Qualification")
             .accessibilityIdentifier("qualification-view")
+        }
+        .onDisappear {
+            if model.phase == .running {
+                model.cancel(using: env.bootstrap.inferenceService)
+            }
         }
     }
 

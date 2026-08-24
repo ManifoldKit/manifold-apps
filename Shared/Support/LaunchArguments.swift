@@ -116,10 +116,17 @@ enum LaunchArguments {
         isUITesting && CommandLine.arguments.contains("--appintent-tool-turn")
     }
 
-    /// Makes the scripted backend return the canonical structured-output
-    /// answer used by the Scenarios feature's deterministic UI test.
+    /// Makes the scripted backend execute the canonical shopping-list tool
+    /// chain used by the Scenarios feature's deterministic UI test.
     static var runsScenarioQualificationTest: Bool {
         isUITesting && CommandLine.arguments.contains("--scenario-qualification-test")
+    }
+
+    /// Stages the prior shipped shopping-list fixture before the deterministic
+    /// qualification run. This proves the production seed migration upgrades
+    /// unmodified installs without touching user-edited fixture content.
+    static var seedsLegacyQualificationFixture: Bool {
+        isUITesting && CommandLine.arguments.contains("--scenario-legacy-fixture-test")
     }
 
     /// The value following `--scenario <id>`, if present. The Scenarios

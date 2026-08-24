@@ -351,7 +351,9 @@ final class AppEnvironment {
     private static var uiTestTurns: [ScriptedBackend.Turn] {
         if LaunchArguments.runsScenarioQualificationTest {
             return [
-                .tokens([#"{"invoice_id":"INV-754-CORE","total":123.45,"currency":"USD"}"#]),
+                .toolCall(name: "read_file", arguments: #"{"path":"shopping-list.txt"}"#),
+                .toolCall(name: "calc", arguments: #"{"a":12.5,"op":"+","b":7.25}"#),
+                .tokens(["apples and rice cost 19.75; skip saffron."]),
             ]
         }
         if LaunchArguments.runsAppIntentToolTurn {
