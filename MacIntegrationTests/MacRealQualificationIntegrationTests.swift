@@ -112,28 +112,45 @@ final class MacRealQualificationIntegrationTests: XCTestCase {
         }
         defer { timeoutTask.cancel() }
 
+        let result: Result<ScenarioRunner.Outcome, Error>
         do {
-            let outcome = try await ScenarioRunner(service: service).run(scenario)
-            if timedOut {
-                throw QualificationError.cellTimedOut(seconds: timeout)
-            }
-            return outcome
+            result = .success(try await ScenarioRunner(service: service).run(scenario))
         } catch {
-            if timedOut {
-                throw QualificationError.cellTimedOut(seconds: timeout)
-            }
-            throw error
+            result = .failure(error)
         }
+
+        if timedOut {
+            guard await waitForGenerationToSettle(service: service) else {
+                throw QualificationError.cancellationDidNotSettle(seconds: timeout)
+            }
+            throw QualificationError.cellTimedOut(seconds: timeout)
+        }
+        return try result.get()
+    }
+
+    private func waitForGenerationToSettle(service: InferenceService) async -> Bool {
+        for _ in 0..<100 {
+            if !service.isGenerating { return true }
+            do {
+                try await Task.sleep(for: .milliseconds(100))
+            } catch {
+                return false
+            }
+        }
+        return !service.isGenerating
     }
 }
 
 private enum QualificationError: LocalizedError {
     case cellTimedOut(seconds: Double)
+    case cancellationDidNotSettle(seconds: Double)
 
     var errorDescription: String? {
         switch self {
         case .cellTimedOut(let seconds):
             "Qualification cell exceeded \(seconds.formatted()) seconds and generation was cancelled."
+        case .cancellationDidNotSettle(let seconds):
+            "Qualification cell exceeded \(seconds.formatted()) seconds, but generation did not settle within 10 seconds of cancellation."
         }
     }
 }
