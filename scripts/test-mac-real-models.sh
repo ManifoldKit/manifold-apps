@@ -9,6 +9,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MLX_MODEL_PATH="${MANIFOLD_MAC_REAL_MLX_MODEL_PATH:-$HOME/Documents/Models/mlx/Qwen3.5-2B-4bit}"
 GGUF_MODEL_PATH="${MANIFOLD_MAC_REAL_GGUF_MODEL_PATH:-$HOME/Documents/Models/gguf/Qwen3.5-2B/Qwen_Qwen3.5-2B-Q4_K_M.gguf}"
 QUALIFICATION_TEST="${MANIFOLD_MAC_REAL_QUALIFICATION_TEST:-0}"
+QUALIFICATION_TIMEOUT_SECONDS="${MANIFOLD_MAC_REAL_QUALIFICATION_TIMEOUT_SECONDS:-300}"
 if [[ "$QUALIFICATION_TEST" == "1" ]]; then
   ONLY_TESTING="ManifoldMacIntegrationTests/MacRealQualificationIntegrationTests"
 else
@@ -35,6 +36,10 @@ display_model_name() {
 [[ -z "${CI:-}" ]] || fail "is a physical-model hardware gate and must not be run in CI."
 [[ "$(uname -m)" == "arm64" ]] || fail "requires an arm64 Mac; this host is $(uname -m)."
 command -v xcodebuild >/dev/null 2>&1 || fail "xcodebuild is unavailable; install full Xcode."
+[[ "$QUALIFICATION_TIMEOUT_SECONDS" =~ ^[0-9]+([.][0-9]+)?$ ]] \
+  || fail "qualification timeout must be a positive number of seconds: $QUALIFICATION_TIMEOUT_SECONDS"
+awk "BEGIN { exit !($QUALIFICATION_TIMEOUT_SECONDS > 0) }" \
+  || fail "qualification timeout must be greater than zero: $QUALIFICATION_TIMEOUT_SECONDS"
 
 # Xcode's package build plugins compile and bundle the companion metallibs in
 # the application. A standalone `metal`/`metallib` lookup is therefore not a
@@ -111,6 +116,7 @@ if ! xcodebuild clean \
 fi
 MANIFOLD_MAC_REAL_MODEL_TEST=1 \
 MANIFOLD_MAC_REAL_QUALIFICATION_TEST="$QUALIFICATION_TEST" \
+MANIFOLD_MAC_REAL_QUALIFICATION_TIMEOUT_SECONDS="$QUALIFICATION_TIMEOUT_SECONDS" \
 MANIFOLD_MAC_REAL_MLX_MODEL_PATH="$STAGED_MLX_MODEL_PATH" \
 MANIFOLD_MAC_REAL_GGUF_MODEL_PATH="$STAGED_GGUF_MODEL_PATH" \
 MANIFOLD_MAC_REAL_MLX_MODEL_BYTES="$MLX_MODEL_BYTES" \
@@ -122,6 +128,7 @@ xcodebuild test \
   -skipPackagePluginValidation \
   MANIFOLD_MAC_REAL_MODEL_TEST=1 \
   MANIFOLD_MAC_REAL_QUALIFICATION_TEST="$QUALIFICATION_TEST" \
+  MANIFOLD_MAC_REAL_QUALIFICATION_TIMEOUT_SECONDS="$QUALIFICATION_TIMEOUT_SECONDS" \
   MANIFOLD_MAC_REAL_MLX_MODEL_PATH="$STAGED_MLX_MODEL_PATH" \
   MANIFOLD_MAC_REAL_GGUF_MODEL_PATH="$STAGED_GGUF_MODEL_PATH" \
   MANIFOLD_MAC_REAL_MLX_MODEL_BYTES="$MLX_MODEL_BYTES" \

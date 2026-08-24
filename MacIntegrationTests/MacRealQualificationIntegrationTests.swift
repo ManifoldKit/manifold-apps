@@ -10,6 +10,15 @@ import XCTest
 /// backend signal before either model loads.
 @MainActor
 final class MacRealQualificationIntegrationTests: XCTestCase {
+    private var cellTimeoutSeconds: Double {
+        guard let rawValue = ProcessInfo.processInfo.environment[
+            "MANIFOLD_MAC_REAL_QUALIFICATION_TIMEOUT_SECONDS"
+        ], let value = Double(rawValue), value > 0 else {
+            return 300
+        }
+        return value
+    }
+
     func testQualificationCorpusAcrossMLXAndGGUF() async throws {
         guard ProcessInfo.processInfo.environment["MANIFOLD_MAC_REAL_QUALIFICATION_TEST"] == "1" else {
             throw XCTSkip("Run make mac-real-qualification with the required local models.")
@@ -42,9 +51,10 @@ final class MacRealQualificationIntegrationTests: XCTestCase {
             for repeatIndex in 1...2 {
                 for scenario in scenarios {
                     do {
-                        let outcome = try await ScenarioRunner(
+                        let outcome = try await run(
+                            scenario,
                             service: env.bootstrap.inferenceService
-                        ).run(scenario)
+                        )
                         if !outcome.passed {
                             let failedAssertions = outcome.assertions
                                 .filter { !$0.passed }
@@ -83,5 +93,47 @@ final class MacRealQualificationIntegrationTests: XCTestCase {
             .replacingOccurrences(of: "\n", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return String(flattened.prefix(400))
+    }
+
+    private func run(
+        _ scenario: Scenario,
+        service: InferenceService
+    ) async throws -> ScenarioRunner.Outcome {
+        var timedOut = false
+        let timeout = cellTimeoutSeconds
+        let timeoutTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .seconds(timeout))
+            } catch {
+                return
+            }
+            timedOut = true
+            service.stopGeneration()
+        }
+        defer { timeoutTask.cancel() }
+
+        do {
+            let outcome = try await ScenarioRunner(service: service).run(scenario)
+            if timedOut {
+                throw QualificationError.cellTimedOut(seconds: timeout)
+            }
+            return outcome
+        } catch {
+            if timedOut {
+                throw QualificationError.cellTimedOut(seconds: timeout)
+            }
+            throw error
+        }
+    }
+}
+
+private enum QualificationError: LocalizedError {
+    case cellTimedOut(seconds: Double)
+
+    var errorDescription: String? {
+        switch self {
+        case .cellTimedOut(let seconds):
+            "Qualification cell exceeded \(seconds.formatted()) seconds and generation was cancelled."
+        }
     }
 }
