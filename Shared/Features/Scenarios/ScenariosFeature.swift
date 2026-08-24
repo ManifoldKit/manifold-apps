@@ -100,15 +100,21 @@ enum LocalQualificationExecutor {
     }
 
     private static func waitForGenerationToSettle(service: InferenceService) async -> Bool {
+        var consecutiveIdleSamples = 0
         for _ in 0..<100 {
-            if !service.isGenerating { return true }
+            if service.isGenerating {
+                consecutiveIdleSamples = 0
+            } else {
+                consecutiveIdleSamples += 1
+                if consecutiveIdleSamples == 10 { return true }
+            }
             do {
                 try await Task.sleep(for: .milliseconds(100))
             } catch {
                 return false
             }
         }
-        return !service.isGenerating
+        return consecutiveIdleSamples == 10
     }
 }
 
