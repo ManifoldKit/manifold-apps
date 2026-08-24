@@ -13,7 +13,7 @@ enum ManifoldToolRoot {
     /// leave no residue in Application Support.
     static func resolve() -> URL {
         let fm = FileManager.default
-        if LaunchArguments.isUITesting {
+        if LaunchArguments.isUITesting || LaunchArguments.runsMacRealModelTest {
             return uiTestingRoot
         }
 

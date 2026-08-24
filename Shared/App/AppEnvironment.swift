@@ -280,7 +280,7 @@ final class AppEnvironment {
             }
         }
 
-        if !isUITesting || runsIOSRealFoundationTest {
+        if (!isUITesting && !runsMacRealModelTest) || runsIOSRealFoundationTest {
             // ModelInfo discovery parses GGUF metadata and sizes MLX trees.
             // ModelRegistry's async API performs that filesystem work away
             // from the main actor so a real local catalogue cannot freeze the

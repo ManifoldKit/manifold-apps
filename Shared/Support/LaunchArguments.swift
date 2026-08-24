@@ -25,6 +25,7 @@ enum LaunchArguments {
     /// it must never select the scripted backend or fixture catalogue.
     static var runsMacRealModelTest: Bool {
         CommandLine.arguments.contains("--mac-real-model-test")
+            || ProcessInfo.processInfo.environment["MANIFOLD_MAC_REAL_MODEL_TEST"] == "1"
     }
 
     /// Enables the physical-iOS Foundation Models release gate. The launch

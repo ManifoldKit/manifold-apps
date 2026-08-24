@@ -43,7 +43,7 @@ make generate   # xcodegen generate
 make build      # builds both schemes (iOS Simulator + macOS), CODE_SIGNING_ALLOWED=NO
 make test       # runs the complete Manifold + ManifoldMac UI-test targets
 make device-test IOS_DEVICE_ID=... DEVELOPMENT_TEAM=... # real Foundation physical gate
-make mac-real-qualification # opt-in MLX + GGUF app-level scenario matrix
+make mac-real-qualification # opt-in MLX + GGUF app-composition scenario matrix
 make clean      # removes the generated project + build artifacts
 ```
 

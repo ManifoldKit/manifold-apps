@@ -20,6 +20,22 @@ enum ScenariosFeature: AppFeature {
     }
 }
 
+/// The app-owned selection from ManifoldTools' shared corpus. Kept outside
+/// the view model so the non-UI physical-model gate exercises the identical
+/// scenario set without duplicating IDs in a second harness.
+enum LocalQualificationCorpus {
+    static let IDs = [
+        "shopping-list-budget",
+        "parallel-readme-comparison",
+    ]
+
+    static func load() throws -> [Scenario] {
+        let loaded = try ScenarioLoader.loadBuiltIn()
+        let byID = Dictionary(uniqueKeysWithValues: loaded.map { ($0.id, $0) })
+        return IDs.compactMap { byID[$0] }
+    }
+}
+
 @MainActor
 @Observable
 private final class ScenarioQualificationModel {
@@ -37,11 +53,6 @@ private final class ScenarioQualificationModel {
     /// the documented local-model ceiling rather than passing the full app
     /// registry for tool-free scenarios. The source scenarios remain package
     /// resources, so the app cannot drift a private copy of their assertions.
-    private static let curatedIDs = [
-        "shopping-list-budget",
-        "parallel-readme-comparison",
-    ]
-
     let scenarios: [Scenario]
     var selectedScenarioID: String?
     var phase: Phase = .idle
@@ -53,17 +64,15 @@ private final class ScenarioQualificationModel {
 
     init(requestedScenarioID: String?) {
         do {
-            let loaded = try ScenarioLoader.loadBuiltIn()
-            let byID = Dictionary(uniqueKeysWithValues: loaded.map { ($0.id, $0) })
-            self.scenarios = Self.curatedIDs.compactMap { byID[$0] }
+            self.scenarios = try LocalQualificationCorpus.load()
             if let requestedScenarioID, self.scenarios.contains(where: { $0.id == requestedScenarioID }) {
                 self.selectedScenarioID = requestedScenarioID
             } else {
                 self.selectedScenarioID = self.scenarios.first?.id
             }
-            if self.scenarios.count != Self.curatedIDs.count {
+            if self.scenarios.count != LocalQualificationCorpus.IDs.count {
                 let present = Set(self.scenarios.map(\.id))
-                let missing = Self.curatedIDs.filter { !present.contains($0) }
+                let missing = LocalQualificationCorpus.IDs.filter { !present.contains($0) }
                 self.errorMessage = "Qualification corpus is incomplete: missing \(missing.joined(separator: ", "))."
             }
         } catch {

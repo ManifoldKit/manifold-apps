@@ -83,8 +83,9 @@ testflight-upload: release-inputs test device-test archive-ios
 mac-real-models:
 	bash ./scripts/test-mac-real-models.sh
 
-# Extends the physical-hardware regression gate with two repetitions of the
-# app's curated local-inference qualification corpus on both supplied models.
+# Runs two repetitions of the app's curated qualification corpus through its
+# production composition root on both companion backends. This is a non-UI
+# integration gate so desktop lock/authentication state cannot mask inference.
 mac-real-qualification:
 	MANIFOLD_MAC_REAL_QUALIFICATION_TEST=1 bash ./scripts/test-mac-real-models.sh
 

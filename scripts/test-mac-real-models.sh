@@ -1,13 +1,19 @@
 #!/usr/bin/env bash
-# Runs the opt-in Manifold Mac MLX -> GGUF -> MLX UI hardware gate. This is not a
-# fixture lane: it intentionally fails before xcodebuild when the local
-# prerequisites are absent, rather than reporting a misleading skipped pass.
+# Runs the opt-in Manifold Mac MLX/GGUF hardware gates. The ordinary path uses
+# the UI switcher regression; qualification uses the app-hosted non-UI
+# integration target so a locked desktop cannot prevent either model loading.
+# Neither is a fixture lane: missing prerequisites fail before xcodebuild.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MLX_MODEL_PATH="${MANIFOLD_MAC_REAL_MLX_MODEL_PATH:-$HOME/Documents/Models/mlx/Qwen3.5-2B-4bit}"
 GGUF_MODEL_PATH="${MANIFOLD_MAC_REAL_GGUF_MODEL_PATH:-$HOME/Documents/Models/gguf/Qwen3.5-2B/Qwen_Qwen3.5-2B-Q4_K_M.gguf}"
 QUALIFICATION_TEST="${MANIFOLD_MAC_REAL_QUALIFICATION_TEST:-0}"
+if [[ "$QUALIFICATION_TEST" == "1" ]]; then
+  ONLY_TESTING="ManifoldMacIntegrationTests/MacRealQualificationIntegrationTests"
+else
+  ONLY_TESTING="ManifoldMacUITests/MacRealModelUITests"
+fi
 
 fail() {
   printf 'Manifold Mac real-model gate: %s\n' "$*" >&2
@@ -109,4 +115,5 @@ xcodebuild test \
   MANIFOLD_MAC_REAL_MLX_MODEL_PATH="$STAGED_MLX_MODEL_PATH" \
   MANIFOLD_MAC_REAL_GGUF_MODEL_PATH="$STAGED_GGUF_MODEL_PATH" \
   MANIFOLD_MAC_REAL_MLX_MODEL_BYTES="$MLX_MODEL_BYTES" \
-  MANIFOLD_MAC_REAL_GGUF_MODEL_BYTES="$GGUF_MODEL_BYTES"
+  MANIFOLD_MAC_REAL_GGUF_MODEL_BYTES="$GGUF_MODEL_BYTES" \
+  "-only-testing:$ONLY_TESTING"
