@@ -280,7 +280,7 @@ final class AppEnvironment {
             }
         }
 
-        if !isUITesting || runsIOSRealFoundationTest {
+        if (!isUITesting && !runsMacRealModelTest) || runsIOSRealFoundationTest {
             // ModelInfo discovery parses GGUF metadata and sizes MLX trees.
             // ModelRegistry's async API performs that filesystem work away
             // from the main actor so a real local catalogue cannot freeze the
@@ -349,6 +349,13 @@ final class AppEnvironment {
     /// turn loop treats as "no more tool calls, stop" rather than an error,
     /// so running out mid-session is harmless.
     private static var uiTestTurns: [ScriptedBackend.Turn] {
+        if LaunchArguments.runsScenarioQualificationTest {
+            return [
+                .toolCall(name: "read_file", arguments: #"{"path":"shopping-list.txt"}"#),
+                .toolCall(name: "calc", arguments: #"{"a":12.5,"op":"+","b":7.25}"#),
+                .tokens(["apples and rice cost 19.75; skip saffron."]),
+            ]
+        }
         if LaunchArguments.runsAppIntentToolTurn {
             return [
                 .toolCall(

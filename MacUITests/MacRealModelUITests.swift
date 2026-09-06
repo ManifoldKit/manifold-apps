@@ -83,25 +83,7 @@ final class MacRealModelUITests: XCTestCase {
 
     @MainActor
     private func loadVerifyAndGenerate(model: String, backend: String, prompt: String) {
-        openModelSwitcher()
-        let switcher = app.descendants(matching: .any)["model-switcher-list"]
-        XCTAssertTrue(switcher.waitForExistence(timeout: 15), "Model switcher should open before selecting \(model)")
-
-        let row = descendant(in: switcher, containing: model)
-        XCTAssertTrue(
-            row.waitForExistence(timeout: 15) && row.isHittable,
-            "The discovered installed model should be selectable: \(model)"
-        )
-        row.tap()
-
-        // The macOS switcher is a popover that stays open after selection.
-        app.typeKey(.escape, modifierFlags: [])
-
-        XCTAssertTrue(
-            waitForChatInputReady(app: app, timeout: 300),
-            "Composer should become ready only after the real \(backend) model load completes"
-        )
-        assertSelectedModelChip(model: model, backend: backend)
+        loadModel(model, backend: backend)
 
         let assistantCountBefore = assistantBubbles().count
         guard let input = findMessageInput(app: app) else {
@@ -140,6 +122,29 @@ final class MacRealModelUITests: XCTestCase {
             waitForChatInputReady(app: app, timeout: 30),
             "Composer should return to an enabled, hittable state after the real \(backend) turn completes"
         )
+    }
+
+    @MainActor
+    private func loadModel(_ model: String, backend: String) {
+        openModelSwitcher()
+        let switcher = app.descendants(matching: .any)["model-switcher-list"]
+        XCTAssertTrue(switcher.waitForExistence(timeout: 15), "Model switcher should open before selecting \(model)")
+
+        let row = descendant(in: switcher, containing: model)
+        XCTAssertTrue(
+            row.waitForExistence(timeout: 15) && row.isHittable,
+            "The discovered installed model should be selectable: \(model)"
+        )
+        row.tap()
+
+        // The macOS switcher is a popover that stays open after selection.
+        app.typeKey(.escape, modifierFlags: [])
+
+        XCTAssertTrue(
+            waitForChatInputReady(app: app, timeout: 300),
+            "Composer should become ready only after the real \(backend) model load completes"
+        )
+        assertSelectedModelChip(model: model, backend: backend)
     }
 
     @MainActor

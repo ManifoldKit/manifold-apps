@@ -28,7 +28,8 @@ spike evidence, upstream prerequisites, and staged backlog.
   workers replace only a stub's `install(into:)`/`makeView(env:)`),
   `Support/` (launch-argument parsing, the ported-but-not-yet-wired
   `InboundPayload`/`PendingSharePayload` types), `DesignSystem/` (minimal
-  spacing/typography tokens).
+  spacing/typography tokens). `Shared/Features/Scenarios/` is the live
+  app-level qualification surface over ManifoldTools' shared corpus.
 - `project.yml` — XcodeGen spec. The generated `Manifold.xcodeproj` is
   **gitignored** (basechat precedent) — regenerate with `make generate`
   whenever `project.yml`, target sources, or dependencies change.
@@ -42,6 +43,7 @@ make generate   # xcodegen generate
 make build      # builds both schemes (iOS Simulator + macOS), CODE_SIGNING_ALLOWED=NO
 make test       # runs the complete Manifold + ManifoldMac UI-test targets
 make device-test IOS_DEVICE_ID=... DEVELOPMENT_TEAM=... # real Foundation physical gate
+make mac-real-qualification # opt-in MLX + GGUF app-composition scenario matrix
 make clean      # removes the generated project + build artifacts
 ```
 

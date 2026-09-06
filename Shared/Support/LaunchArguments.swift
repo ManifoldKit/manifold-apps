@@ -25,6 +25,7 @@ enum LaunchArguments {
     /// it must never select the scripted backend or fixture catalogue.
     static var runsMacRealModelTest: Bool {
         CommandLine.arguments.contains("--mac-real-model-test")
+            || ProcessInfo.processInfo.environment["MANIFOLD_MAC_REAL_MODEL_TEST"] == "1"
     }
 
     /// Enables the physical-iOS Foundation Models release gate. The launch
@@ -116,9 +117,21 @@ enum LaunchArguments {
         isUITesting && CommandLine.arguments.contains("--appintent-tool-turn")
     }
 
-    /// The value following `--scenario <id>`, if present. Reserved for the
-    /// future `ScenariosFeature` (mirrors core's `--bck-demo-scenario`);
-    /// unused until that feature is ported.
+    /// Makes the scripted backend execute the canonical shopping-list tool
+    /// chain used by the Scenarios feature's deterministic UI test.
+    static var runsScenarioQualificationTest: Bool {
+        isUITesting && CommandLine.arguments.contains("--scenario-qualification-test")
+    }
+
+    /// Stages the prior shipped shopping-list fixture before the deterministic
+    /// qualification run. This proves the production seed migration upgrades
+    /// unmodified installs without touching user-edited fixture content.
+    static var seedsLegacyQualificationFixture: Bool {
+        isUITesting && CommandLine.arguments.contains("--scenario-legacy-fixture-test")
+    }
+
+    /// The value following `--scenario <id>`, if present. The Scenarios
+    /// feature uses it as the initial qualification selection.
     static var scenario: String? {
         value(after: "--scenario")
     }

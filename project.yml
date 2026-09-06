@@ -139,6 +139,19 @@ targets:
         SWIFT_VERSION: "6.0"
         GENERATE_INFOPLIST_FILE: YES
 
+  ManifoldMacIntegrationTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - MacIntegrationTests
+    dependencies:
+      - target: ManifoldMac
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.manifoldkit.ManifoldMacIntegrationTests
+        SWIFT_VERSION: "6.0"
+        GENERATE_INFOPLIST_FILE: YES
+
 schemes:
   Manifold:
     build:
@@ -160,8 +173,11 @@ schemes:
     test:
       targets:
         - ManifoldMacUITests
+        - ManifoldMacIntegrationTests
       environmentVariables:
         MANIFOLD_MAC_REAL_MODEL_TEST: "$(MANIFOLD_MAC_REAL_MODEL_TEST)"
+        MANIFOLD_MAC_REAL_QUALIFICATION_TEST: "$(MANIFOLD_MAC_REAL_QUALIFICATION_TEST)"
+        MANIFOLD_MAC_REAL_QUALIFICATION_TIMEOUT_SECONDS: "$(MANIFOLD_MAC_REAL_QUALIFICATION_TIMEOUT_SECONDS)"
         MANIFOLD_MAC_REAL_MLX_MODEL_PATH: "$(MANIFOLD_MAC_REAL_MLX_MODEL_PATH)"
         MANIFOLD_MAC_REAL_GGUF_MODEL_PATH: "$(MANIFOLD_MAC_REAL_GGUF_MODEL_PATH)"
         MANIFOLD_MAC_REAL_MLX_MODEL_BYTES: "$(MANIFOLD_MAC_REAL_MLX_MODEL_BYTES)"

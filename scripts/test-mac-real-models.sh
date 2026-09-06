@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
-# Runs the opt-in Manifold Mac MLX -> GGUF -> MLX UI hardware gate. This is not a
-# fixture lane: it intentionally fails before xcodebuild when the local
-# prerequisites are absent, rather than reporting a misleading skipped pass.
+# Runs the opt-in Manifold Mac MLX/GGUF hardware gates. The ordinary path uses
+# the UI switcher regression; qualification uses the app-hosted non-UI
+# integration target so a locked desktop cannot prevent either model loading.
+# Neither is a fixture lane: missing prerequisites fail before xcodebuild.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MLX_MODEL_PATH="${MANIFOLD_MAC_REAL_MLX_MODEL_PATH:-$HOME/Documents/Models/mlx/Qwen3.5-2B-4bit}"
 GGUF_MODEL_PATH="${MANIFOLD_MAC_REAL_GGUF_MODEL_PATH:-$HOME/Documents/Models/gguf/Qwen3.5-2B/Qwen_Qwen3.5-2B-Q4_K_M.gguf}"
+QUALIFICATION_TEST="${MANIFOLD_MAC_REAL_QUALIFICATION_TEST:-0}"
+QUALIFICATION_TIMEOUT_SECONDS="${MANIFOLD_MAC_REAL_QUALIFICATION_TIMEOUT_SECONDS:-300}"
+if [[ "$QUALIFICATION_TEST" == "1" ]]; then
+  ONLY_TESTING="ManifoldMacIntegrationTests/MacRealQualificationIntegrationTests"
+else
+  ONLY_TESTING="ManifoldMacUITests/MacRealModelUITests"
+fi
 
 fail() {
   printf 'Manifold Mac real-model gate: %s\n' "$*" >&2
@@ -28,6 +36,10 @@ display_model_name() {
 [[ -z "${CI:-}" ]] || fail "is a physical-model hardware gate and must not be run in CI."
 [[ "$(uname -m)" == "arm64" ]] || fail "requires an arm64 Mac; this host is $(uname -m)."
 command -v xcodebuild >/dev/null 2>&1 || fail "xcodebuild is unavailable; install full Xcode."
+[[ "$QUALIFICATION_TIMEOUT_SECONDS" =~ ^[0-9]+([.][0-9]+)?$ ]] \
+  || fail "qualification timeout must be a positive number of seconds: $QUALIFICATION_TIMEOUT_SECONDS"
+awk "BEGIN { exit !($QUALIFICATION_TIMEOUT_SECONDS > 0) }" \
+  || fail "qualification timeout must be greater than zero: $QUALIFICATION_TIMEOUT_SECONDS"
 
 # Xcode's package build plugins compile and bundle the companion metallibs in
 # the application. A standalone `metal`/`metallib` lookup is therefore not a
@@ -92,7 +104,19 @@ cd "$REPO_ROOT"
 if ! xcodegen generate; then
   fail "XcodeGen failed to generate Manifold.xcodeproj."
 fi
+# MLX's build plugin places mlx.metallib inside the app bundle. After a test
+# invocation, that incremental product can remain unsigned and the next
+# codesign rejects the whole app before tests start. A scheme-scoped clean
+# preserves downloaded packages while making repeated hardware runs reliable.
+if ! xcodebuild clean \
+  -project Manifold.xcodeproj \
+  -scheme ManifoldMac \
+  -destination 'platform=macOS,arch=arm64'; then
+  fail "could not clean stale ManifoldMac hardware-gate products."
+fi
 MANIFOLD_MAC_REAL_MODEL_TEST=1 \
+MANIFOLD_MAC_REAL_QUALIFICATION_TEST="$QUALIFICATION_TEST" \
+MANIFOLD_MAC_REAL_QUALIFICATION_TIMEOUT_SECONDS="$QUALIFICATION_TIMEOUT_SECONDS" \
 MANIFOLD_MAC_REAL_MLX_MODEL_PATH="$STAGED_MLX_MODEL_PATH" \
 MANIFOLD_MAC_REAL_GGUF_MODEL_PATH="$STAGED_GGUF_MODEL_PATH" \
 MANIFOLD_MAC_REAL_MLX_MODEL_BYTES="$MLX_MODEL_BYTES" \
@@ -103,7 +127,10 @@ xcodebuild test \
   -destination 'platform=macOS,arch=arm64' \
   -skipPackagePluginValidation \
   MANIFOLD_MAC_REAL_MODEL_TEST=1 \
+  MANIFOLD_MAC_REAL_QUALIFICATION_TEST="$QUALIFICATION_TEST" \
+  MANIFOLD_MAC_REAL_QUALIFICATION_TIMEOUT_SECONDS="$QUALIFICATION_TIMEOUT_SECONDS" \
   MANIFOLD_MAC_REAL_MLX_MODEL_PATH="$STAGED_MLX_MODEL_PATH" \
   MANIFOLD_MAC_REAL_GGUF_MODEL_PATH="$STAGED_GGUF_MODEL_PATH" \
   MANIFOLD_MAC_REAL_MLX_MODEL_BYTES="$MLX_MODEL_BYTES" \
-  MANIFOLD_MAC_REAL_GGUF_MODEL_BYTES="$GGUF_MODEL_BYTES"
+  MANIFOLD_MAC_REAL_GGUF_MODEL_BYTES="$GGUF_MODEL_BYTES" \
+  "-only-testing:$ONLY_TESTING"
