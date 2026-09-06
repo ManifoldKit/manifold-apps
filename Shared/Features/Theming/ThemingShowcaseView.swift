@@ -60,19 +60,30 @@ enum ThemingPreset: String, CaseIterable, Identifiable {
 struct ThemingShowcaseView: View {
     let env: AppEnvironment
 
-    private static let previewSessionID = UUID()
-
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                header
-                picker
-                preview
-            }
+            ThemingShowcaseContent(env: env)
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .navigationTitle("Theming")
+    }
+}
+
+/// Reusable live theming example. `ThemingShowcaseView` supplies standalone
+/// scrolling/navigation; Explore embeds this content directly to avoid nesting
+/// scroll views or navigation titles.
+struct ThemingShowcaseContent: View {
+    let env: AppEnvironment
+
+    private static let previewSessionID = UUID()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            header
+            picker
+            preview
+        }
     }
 
     private var header: some View {
@@ -86,19 +97,27 @@ struct ThemingShowcaseView: View {
     }
 
     private var picker: some View {
-        Picker(
-            "Appearance",
-            selection: Binding(
-                get: { env.themePreset },
-                set: { env.themePreset = $0 }
-            )
-        ) {
-            ForEach(ThemingPreset.allCases) { option in
-                Text(option.title).tag(option)
+        VStack(alignment: .leading, spacing: 10) {
+            Picker(
+                "Appearance",
+                selection: Binding(
+                    get: { env.themePreset },
+                    set: { env.themePreset = $0 }
+                )
+            ) {
+                ForEach(ThemingPreset.allCases) { option in
+                    Text(option.title).tag(option)
+                }
             }
+            .pickerStyle(.segmented)
+            .accessibilityIdentifier("theming-preset-picker")
+
+            Button("Reset appearance") {
+                env.themePreset = .standard
+            }
+            .buttonStyle(.borderless)
+            .accessibilityIdentifier("theming-reset-button")
         }
-        .pickerStyle(.segmented)
-        .accessibilityIdentifier("theming-preset-picker")
     }
 
     private var preview: some View {

@@ -60,6 +60,16 @@ final class ThemingUITests: XCTestCase {
             "Switching presets must visibly change the live preview, not just register a tap"
         )
 
+        let reset = app.descendants(matching: .any)["theming-reset-button"]
+        XCTAssertTrue(reset.waitForExistence(timeout: 5), "Theming should expose an explicit reset action")
+        reset.tap()
+        XCTAssertTrue(
+            cornerRadiusLabel.label.contains("20pt"),
+            "Reset appearance should restore the Standard preset through RootView's live theme cascade"
+        )
+
+        classicOption.tap()
+
         showSidebarIfNeeded(app: app)
         let selectedThemingRow = featureSidebarRow("theming", app: app)
         XCTAssertTrue(
