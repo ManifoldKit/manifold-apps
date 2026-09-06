@@ -117,6 +117,10 @@ struct RootView: View {
         }
         .environment(env.viewModel)
         .environment(env.sessionManager)
+        .environment(\.exploreNavigationActions, ExploreNavigationActions(
+            showModels: { showModelManagement = true },
+            showCloud: { selectFeature(CloudFeature.id) }
+        ))
         .task {
             guard !didInstallFeatures else { return }
             didInstallFeatures = true

@@ -4,10 +4,26 @@ import Foundation
 enum LaunchArguments {
     /// True when the app was launched with `--uitesting` (set by
     /// `ManifoldUITests`' `launchApp()`). Selects the deterministic
-    /// `ScriptedBackend` inference path and an in-memory persistence store —
+    /// `ScriptedBackend` inference path and normally an in-memory store.
+    /// `MANIFOLD_UI_TEST_STORE_ID` opts a relaunch test into a separate store;
     /// see `AppEnvironment.bootstrap(storeName:appName:bundleIdentifier:)`.
     static var isUITesting: Bool {
         CommandLine.arguments.contains("--uitesting")
+    }
+
+    /// Opt-in persistence for a relaunch test. The UUID selects an app-owned
+    /// test directory, never an arbitrary path or the production store.
+    /// Ignored outside --uitesting; malformed opt-in values fail startup.
+    static func persistenceTestRunID(
+        arguments: [String] = CommandLine.arguments,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) throws -> UUID? {
+        guard arguments.contains("--uitesting"),
+              let rawID = environment["MANIFOLD_UI_TEST_STORE_ID"] else { return nil }
+        guard let id = UUID(uuidString: rawID) else {
+            throw PersistenceTestConfigurationError.invalidRunID
+        }
+        return id
     }
 
     /// Enables the macOS Manifold local-model UI regression fixture. This stays
@@ -143,5 +159,20 @@ enum LaunchArguments {
             return nil
         }
         return bytes
+    }
+}
+
+/// Errors are surfaced by the app's existing startup error presentation.
+enum PersistenceTestConfigurationError: LocalizedError {
+    case invalidRunID
+    case unavailableDefaults
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidRunID:
+            "MANIFOLD_UI_TEST_STORE_ID must be a UUID."
+        case .unavailableDefaults:
+            "Could not create isolated UI-test session preferences."
+        }
     }
 }

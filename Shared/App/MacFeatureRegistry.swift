@@ -3,6 +3,7 @@
 /// client surface targets macOS only in this repo's product split.
 enum MacFeatureRegistry {
     static let all: [any AppFeature.Type] = [
+        ExploreFeature.self,
         ToolsFeature.self,
         ScenariosFeature.self,
         CloudFeature.self,
