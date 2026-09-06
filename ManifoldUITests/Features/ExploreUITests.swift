@@ -151,7 +151,7 @@ final class ExploreUITests: XCTestCase {
         XCTAssertTrue(send.waitForExistence(timeout: 5) && send.isEnabled)
         send.tap()
         XCTAssertTrue(
-            waitForCompletedChatTurn(app: app, timeout: 15).hasPrefix("Response complete:"),
+            waitForCompletedChatTurn(app: app, timeout: 15)?.hasPrefix("Response complete:") == true,
             "Each persisted session must finish a real scripted turn before selection is tested"
         )
         XCTAssertTrue(
