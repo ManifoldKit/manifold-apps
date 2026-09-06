@@ -29,6 +29,7 @@ final class ExploreUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["theming-preset-picker"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["Guided"].exists)
         XCTAssertFalse(app.staticTexts["Live"].exists)
+        captureScreenshot(name: "Explore-Component-Examples")
 
         let readout = app.descendants(matching: .any)["theming-corner-radius-label"]
         XCTAssertTrue(readout.waitForExistence(timeout: 5))
@@ -37,6 +38,7 @@ final class ExploreUITests: XCTestCase {
         let brand = app.buttons["Brand"]
         XCTAssertTrue(tapExploreElement(brand), "Brand must be reachable through the bounded Explore scroll path")
         XCTAssertNotEqual(readout.label, standard, "Brand must change the actual root-installed theme readout")
+        captureScreenshot(name: "Explore-Brand-Theme")
 
         let reset = app.descendants(matching: .any)["theming-reset-button"]
         XCTAssertTrue(tapExploreElement(reset), "Reset must be reachable through the bounded Explore scroll path")
@@ -48,6 +50,7 @@ final class ExploreUITests: XCTestCase {
             app.descendants(matching: .any)["model-management-tab-picker"].waitForExistence(timeout: 5),
             "Models must open RootView's existing ModelManagementSheet"
         )
+        captureScreenshot(name: "Explore-Model-Management")
         dismissSheet(app: app)
 
         navigateToExplore()
@@ -59,6 +62,7 @@ final class ExploreUITests: XCTestCase {
             ).firstMatch.waitForExistence(timeout: 5),
             "Cloud providers must route to the existing API configuration surface"
         )
+        captureScreenshot(name: "Explore-Cloud-Providers")
     }
 
     func testExploreNavigationPreservesRestoredActiveSessionAcrossIsolatedRelaunch() throws {
