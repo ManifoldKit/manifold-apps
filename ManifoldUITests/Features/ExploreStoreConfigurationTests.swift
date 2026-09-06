@@ -3,6 +3,9 @@ import XCTest
 final class ExploreStoreConfigurationTests: XCTestCase {
     func testPersistentStoreOptInRequiresUITesting() throws {
         XCTAssertNil(try LaunchArguments.persistenceTestRunID(
+            arguments: [], environment: ["MANIFOLD_UI_TEST_STORE_ID": UUID().uuidString]
+        ))
+        XCTAssertNil(try LaunchArguments.persistenceTestRunID(
             arguments: [], environment: ["MANIFOLD_UI_TEST_STORE_ID": "invalid"]
         ))
     }

@@ -124,3 +124,23 @@ window's title region and assert foreground state before interacting with
 controls. In the macOS Manifold app, normalized x=0.3 is the title; x=0.5 hits the
 model-switcher chip and opens its popover, so a generic title-center click
 introduces a different test failure.
+
+## SwiftUI layout-group identifiers can replace child control identifiers
+
+An Explore source Link and embedded theme picker/reset/readout existed in the
+UI but could not be found by their own identifiers. The captured XCUITest
+hierarchy showed the identifier on each transparent parent VStack had
+propagated to every child, replacing the controls' identifiers. Put identifiers
+on individual labels or controls; avoid adding one to a reusable content
+wrapper that already contains identified descendants. Inspect the captured
+accessibility hierarchy before treating a lookup failure as missing UI.
+
+## Session row text does not carry native list selection
+
+The identified `session-row` can be a StaticText whose `isSelected` is false
+even for the active conversation. Selecting the first apparently inactive row
+therefore selected the newest chat again. For the isolated relaunch fixture,
+require exactly two unpinned nonempty chats, use the released newest-first
+`updatedAt` ordering to select the second row, and assert the actual older
+`User said:` bubble before relaunch. A sidebar title alone does not prove the
+active conversation.
