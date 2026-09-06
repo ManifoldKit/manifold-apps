@@ -10,6 +10,7 @@ final class MacExploreUITests: XCTestCase {
         app = launchApp()
     }
 
+    @MainActor
     func testExploreUsesNativeSetupRoutesAndResetsAppearance() throws {
         XCTAssertTrue(tapFeatureSidebarRow("explore", app: app))
         XCTAssertTrue(app.descendants(matching: .any)["explore-root"].waitForExistence(timeout: 5))
