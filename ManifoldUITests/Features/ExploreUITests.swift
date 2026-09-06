@@ -26,7 +26,7 @@ final class ExploreUITests: XCTestCase {
         XCTAssertTrue(userExample.waitForExistence(timeout: 5))
         XCTAssertTrue(assistantExample.waitForExistence(timeout: 5))
         XCTAssertTrue(app.descendants(matching: .any)["explore-message-bubble-source"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.descendants(matching: .any)["explore-theming-showcase"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["theming-preset-picker"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["Guided"].exists)
         XCTAssertFalse(app.staticTexts["Live"].exists)
 
@@ -86,10 +86,16 @@ final class ExploreUITests: XCTestCase {
 
         showSidebarIfNeeded(app: app)
         XCTAssertTrue(waitForSessionRows(count: 2), "The isolated store should retain two real session rows")
-        guard let olderSession = sessionRows().first(where: { !$0.isSelected }) else {
-            XCTFail("A second active session should leave the older session selectable")
+        let rows = sessionRows()
+        guard rows.count == 2 else {
+            XCTFail("The isolated store should expose exactly its two created session rows")
             return
         }
+        // SessionStore's public contract orders rows by updatedAt descending.
+        // The second turn is newer, so index 1 is the older conversation. Do
+        // not use XCUIElement.isSelected: SessionRowView leaves that trait to
+        // List(selection:) and its public row content defaults it to false.
+        let olderSession = rows[1]
         olderSession.tap()
         XCTAssertTrue(messageElement(olderMarker).waitForExistence(timeout: 10))
 

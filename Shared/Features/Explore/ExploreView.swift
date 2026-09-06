@@ -53,6 +53,7 @@ struct ExploreView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Label("Built with public components", systemImage: "curlybraces")
                     .font(.subheadline.weight(.semibold))
+                    .accessibilityIdentifier("explore-component-reference")
                 Text("`MessageBubbleView` renders the conversation content, including Markdown and fenced code, while `ChatTheme` supplies its visual language.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -62,14 +63,12 @@ struct ExploreView: View {
                 }
                 .accessibilityIdentifier("explore-message-bubble-source")
             }
-            .accessibilityIdentifier("explore-component-reference")
         }
     }
 
     private var appearance: some View {
         ExploreCard(title: "Appearance", subtitle: "A theme change applies through the same root cascade as chat.") {
             ThemingShowcaseContent(env: env)
-                .accessibilityIdentifier("explore-theming-showcase")
         }
     }
 
