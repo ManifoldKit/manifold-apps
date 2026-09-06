@@ -46,11 +46,7 @@ struct ExploreView: View {
         ExploreCard(title: "Make it yours", subtitle: "Text, Markdown, and code are ordinary chat content.") {
             VStack(spacing: 10) {
                 MessageBubbleView(message: userPreview, isStreaming: false)
-                    .accessibilityLabel("Explore user example: Can a conversation include Markdown?")
-                    .accessibilityIdentifier("explore-user-message")
                 MessageBubbleView(message: assistantPreview, isStreaming: false)
-                    .accessibilityLabel("Explore assistant example: Markdown and code")
-                    .accessibilityIdentifier("explore-assistant-message")
             }
             .environment(env.viewModel)
 

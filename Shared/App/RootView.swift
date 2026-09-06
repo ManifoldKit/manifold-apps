@@ -247,8 +247,10 @@ struct RootView: View {
             ForEach(features) { entry in
                 Label(entry.title, systemImage: entry.systemImage)
                     .tag(entry.id)
+                    .accessibilityIdentifier("feature-sidebar-row-\(entry.id)")
             }
         }
+        .accessibilityIdentifier("feature-sidebar-list")
         #endif
     }
 

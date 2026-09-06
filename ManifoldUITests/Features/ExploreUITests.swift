@@ -15,12 +15,16 @@ final class ExploreUITests: XCTestCase {
         navigateToExplore()
 
         XCTAssertTrue(app.descendants(matching: .any)["explore-component-reference"].waitForExistence(timeout: 5))
-        let userExample = app.descendants(matching: .any)["explore-user-message"]
-        let assistantExample = app.descendants(matching: .any)["explore-assistant-message"]
+        let userLabel = "User said: Can a conversation include Markdown?"
+        let assistantLabel = "Assistant said: Yes. **Markdown** and code render as regular message content.\n\n```swift\nlet theme = ManifoldTheme.standard\n```"
+        let userExample = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label == %@", userLabel)
+        ).firstMatch
+        let assistantExample = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label == %@", assistantLabel)
+        ).firstMatch
         XCTAssertTrue(userExample.waitForExistence(timeout: 5))
-        XCTAssertTrue(userExample.label.contains("Can a conversation include Markdown?"))
         XCTAssertTrue(assistantExample.waitForExistence(timeout: 5))
-        XCTAssertTrue(assistantExample.label.contains("Markdown and code"))
         XCTAssertTrue(app.descendants(matching: .any)["explore-message-bubble-source"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.descendants(matching: .any)["explore-theming-showcase"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["Guided"].exists)
@@ -60,14 +64,17 @@ final class ExploreUITests: XCTestCase {
     func testExploreNavigationPreservesRestoredActiveSessionAcrossIsolatedRelaunch() throws {
         let storeID = UUID().uuidString
         let freshStoreID = UUID().uuidString
-        let marker = "Explore relaunch \(storeID)"
+        let olderMarker = "Explore older session \(storeID)"
+        let newerMarker = "Explore newer session \(storeID)"
         app.terminate()
         app = launchRelaunchStore(storeID: storeID)
         openChatDetailIfNeeded(app: app)
         XCTAssertTrue(waitForChatInputReady(app: app, timeout: 15))
+        sendMessage(olderMarker)
 
-        // Make a second real session active. Restoring the only session would
-        // not prove that the persisted active-session identity was honoured.
+        // Make two non-empty sessions, then select the older one. This proves
+        // the persisted active-session identity wins over any latest-nonempty
+        // fallback when the same isolated store is relaunched.
         showSidebarIfNeeded(app: app)
         guard let newChat = findNewChatButton(app: app) else {
             XCTFail("The persisted-store launch must expose New Chat")
@@ -75,52 +82,46 @@ final class ExploreUITests: XCTestCase {
         }
         newChat.tap()
         XCTAssertTrue(waitForChatInputReady(app: app, timeout: 10))
+        sendMessage(newerMarker)
 
-        guard let input = findMessageInput(app: app) else {
-            XCTFail("A persisted-store launch should still expose the scripted chat composer")
+        showSidebarIfNeeded(app: app)
+        XCTAssertTrue(waitForSessionRows(count: 2), "The isolated store should retain two real session rows")
+        guard let olderSession = sessionRows().first(where: { !$0.isSelected }) else {
+            XCTFail("A second active session should leave the older session selectable")
             return
         }
-        input.tap()
-        input.typeText(marker)
-        let send = app.buttons["Send message"]
-        XCTAssertTrue(send.waitForExistence(timeout: 5) && send.isEnabled)
-        send.tap()
-        XCTAssertEqual(
-            waitForCompletedChatTurn(app: app, timeout: 15),
-            "Response complete: Hello from the scripted UI-test backend."
-        )
+        olderSession.tap()
+        XCTAssertTrue(messageElement(olderMarker).waitForExistence(timeout: 10))
 
         app.terminate()
         app = launchRelaunchStore(storeID: storeID)
         openChatDetailIfNeeded(app: app)
 
-        let restoredResponse = app.descendants(matching: .any).matching(
-            NSPredicate(format: "label CONTAINS %@", marker)
-        ).firstMatch
         XCTAssertTrue(
-            restoredResponse.waitForExistence(timeout: 10),
-            "The active session selected before relaunch must restore with its persisted conversation"
+            messageElement(olderMarker).waitForExistence(timeout: 10),
+            "The explicitly selected older session must restore instead of falling back to the newest non-empty session"
         )
+        XCTAssertFalse(messageElement(newerMarker).exists, "The newer session must not become active after same-store relaunch")
 
         XCTAssertTrue(tapFeatureSidebarRow("explore", app: app))
         XCTAssertTrue(app.descendants(matching: .any)["explore-root"].waitForExistence(timeout: 5))
 
-        openChatDetailIfNeeded(app: app)
         XCTAssertTrue(
-            restoredResponse.exists,
+            tapFeatureSidebarRow("chat", app: app),
+            "The existing Chat sidebar route must restore the active conversation without selecting another session"
+        )
+        XCTAssertTrue(waitForChatInputReady(app: app, timeout: 10))
+        XCTAssertTrue(
+            messageElement(olderMarker).exists,
             "Leaving Explore must retain the restored active conversation"
         )
+        XCTAssertFalse(messageElement(newerMarker).exists)
 
         app.terminate()
         app = launchRelaunchStore(storeID: freshStoreID)
         openChatDetailIfNeeded(app: app)
-        let leakedMessage = app.descendants(matching: .any).matching(
-            NSPredicate(format: "label CONTAINS %@", marker)
-        ).firstMatch
-        XCTAssertFalse(
-            leakedMessage.exists,
-            "A different run-owned store UUID must not inherit a prior session or message"
-        )
+        XCTAssertFalse(messageElement(olderMarker).exists, "A different store UUID must not inherit the older session")
+        XCTAssertFalse(messageElement(newerMarker).exists, "A different store UUID must not inherit the newer session")
     }
 
     private func navigateToExplore() {
@@ -137,6 +138,48 @@ final class ExploreUITests: XCTestCase {
         app.launchEnvironment["MANIFOLD_UI_TEST_STORE_ID"] = storeID
         app.launch()
         return app
+    }
+
+    private func sendMessage(_ message: String) {
+        guard let input = findMessageInput(app: app) else {
+            XCTFail("A persisted-store launch should expose the scripted chat composer")
+            return
+        }
+        input.tap()
+        input.typeText(message)
+        let send = app.buttons["Send message"]
+        XCTAssertTrue(send.waitForExistence(timeout: 5) && send.isEnabled)
+        send.tap()
+        XCTAssertTrue(
+            waitForCompletedChatTurn(app: app, timeout: 15).hasPrefix("Response complete:"),
+            "Each persisted session must finish a real scripted turn before selection is tested"
+        )
+        XCTAssertTrue(
+            messageElement(message).waitForExistence(timeout: 5),
+            "The completed real turn must leave its component-derived user bubble visible before switching sessions"
+        )
+    }
+
+    private func messageElement(_ marker: String) -> XCUIElement {
+        app.descendants(matching: .any).matching(
+            NSPredicate(format: "label == %@", "User said: \(marker)")
+        ).firstMatch
+    }
+
+    private func sessionRows() -> [XCUIElement] {
+        app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier == 'session-row'"))
+            .allElementsBoundByIndex
+    }
+
+    private func waitForSessionRows(count: Int, timeout: TimeInterval = 5) -> Bool {
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate { [weak self] _, _ in
+                (self?.sessionRows().count ?? 0) >= count
+            },
+            object: nil
+        )
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
     }
 
     /// Explore is intentionally a long, readable document. Compact iPhone
