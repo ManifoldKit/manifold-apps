@@ -124,3 +124,69 @@ window's title region and assert foreground state before interacting with
 controls. In the macOS Manifold app, normalized x=0.3 is the title; x=0.5 hits the
 model-switcher chip and opens its popover, so a generic title-center click
 introduces a different test failure.
+
+## SwiftUI layout-group identifiers can replace child control identifiers
+
+An Explore source Link and embedded theme picker/reset/readout existed in the
+UI but could not be found by their own identifiers. The captured XCUITest
+hierarchy showed the identifier on each transparent parent VStack had
+propagated to every child, replacing the controls' identifiers. Put identifiers
+on individual labels or controls; avoid adding one to a reusable content
+wrapper that already contains identified descendants. Inspect the captured
+accessibility hierarchy before treating a lookup failure as missing UI.
+
+## Session row text does not carry native list selection
+
+The identified `session-row` can be a StaticText whose `isSelected` is false
+even for the active conversation. Selecting the first apparently inactive row
+therefore selected the newest chat again. For the isolated relaunch fixture,
+require exactly two unpinned nonempty chats, use the released newest-first
+`updatedAt` ordering to select the second row, and assert the actual older
+`User said:` bubble before relaunch. A sidebar title alone does not prove the
+active conversation.
+
+## Sidebar visibility must include native macOS row text
+
+Mac Explore's first navigation failed in `app.swipeRight()` although the native
+sidebar was already visible. The captured hierarchy exposed `session-row` as
+StaticText; the shared helper only queried Cell and Other. Match the exact
+app-owned identifier across all element types so the existing session row
+proves sidebar visibility before any compact-navigation fallback. Keep the
+identifier constraint: an arbitrary cell or static text is not sidebar proof.
+
+## iPad multiline composer tests must avoid the scrollbar hit region
+
+Five chat-entry tests failed with no keyboard focus after a generic TextField
+tap on iPad, including four unchanged tests reproduced on main. Interactive
+click/type/send worked. The captured 22pt-high field included a horizontal
+scrollbar across its center: the default XCTest hit point was in that band.
+Tap inside the same field at normalized x=0.05, y=0.20, above the scrollbar,
+then use ordinary typeText and the existing completed-turn assertions. This
+changed the complete iPad target from five focus failures to 47 passes and one
+expected physical-device skip. Keep this interaction in tapMessageEditingArea;
+do not inject text into app state or weaken the conversation assertions.
+
+## CUA text grouping is not an XCTest selector contract
+
+CUA displayed the Mac theme preview heading and radius as combined text, but
+XCTest exposed the radius separately with theming-corner-radius-label. A query
+for CUA's merged string failed the complete Mac target. Use the captured XCTest
+identifier and exact label/value (Bubble corner radius: 20pt or 22pt), and query
+the native preset as a radio button. The corrected complete Mac target passed.
+
+## Coarse Mac UI-test swipes can skip the target entirely
+
+Mac Explore's Brand radio button existed but stayed non-hittable on hosted
+macOS 15.7.9. Diagnostic geometry showed one fast swipe moved it from below
+the scroll viewport to above it; subsequent downward scrolling never recovered.
+A shorter local macOS 26 window reproduced the same failure, while ordinary
+user scrolling and Brand/reset worked. Use bounded incremental scroll events,
+recompute direction from the target and viewport frames each time, and tap only
+when the native control is hittable. For XCUIElement's Mac scroll event, negative
+deltaY reveals lower content and positive reveals higher content. A full short-
+window target proved the original failure and the corrected direction; do not
+resize the window inside tests or replace real taps with state injection.
+
+## UI tests must observe feature arrival before navigating away again
+
+Hosted iPhone Theming coverage selected Cloud and immediately reopened the sidebar. The initial Theming route passed, but the return route could fail because `showSidebarIfNeeded` accepted an existing session accessibility node while `feature-sidebar-list` was absent during the transition. The test also had no assertion that Cloud actually replaced Theming. Await the real `APIConfigurationView` title (`Cloud APIs`, using the same label/value predicate as CloudUITests) after the Cloud tap, then navigate back and retain the restored Classic readout assertion. This keeps synchronization local to the test and leaves shared sidebar behavior unchanged. A complete iPhone negative-control run with an impossible title failed only the new arrival assertion; after exact restoration the Theming round trip passed. Failure-only screenshots and AX output remain when Theming sidebar-row selection fails.

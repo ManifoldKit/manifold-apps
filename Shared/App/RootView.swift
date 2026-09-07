@@ -117,6 +117,10 @@ struct RootView: View {
         }
         .environment(env.viewModel)
         .environment(env.sessionManager)
+        .environment(\.exploreNavigationActions, ExploreNavigationActions(
+            showModels: { showModelManagement = true },
+            showCloud: { selectFeature(CloudFeature.id) }
+        ))
         .task {
             guard !didInstallFeatures else { return }
             didInstallFeatures = true
@@ -243,8 +247,10 @@ struct RootView: View {
             ForEach(features) { entry in
                 Label(entry.title, systemImage: entry.systemImage)
                     .tag(entry.id)
+                    .accessibilityIdentifier("feature-sidebar-row-\(entry.id)")
             }
         }
+        .accessibilityIdentifier("feature-sidebar-list")
         #endif
     }
 

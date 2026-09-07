@@ -3,6 +3,7 @@
 /// only in this repo's product split (see ``MacFeatureRegistry``).
 enum MobileFeatureRegistry {
     static let all: [any AppFeature.Type] = [
+        ExploreFeature.self,
         ToolsFeature.self,
         ScenariosFeature.self,
         CloudFeature.self,

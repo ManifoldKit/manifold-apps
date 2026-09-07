@@ -73,6 +73,9 @@ final class AppEnvironment {
     /// unlike the live-backend path below. `--mac-real-model-test` is the
     /// explicit exception: it uses the same in-memory store for isolation but
     /// always constructs and registers the production backends.
+    /// `MANIFOLD_UI_TEST_STORE_ID` under `--uitesting` is a separate opt-in:
+    /// a UUID names a test-only on-disk store and session preferences so UI
+    /// tests can prove relaunch restoration without opening production data.
     ///
     /// - Parameters:
     ///   - storeName: SwiftData configuration name for the in-memory store
@@ -92,6 +95,7 @@ final class AppEnvironment {
         let runsMacRealModelTest = LaunchArguments.runsMacRealModelTest
         let runsIOSRealFoundationTest = LaunchArguments.runsIOSRealFoundationTest
         let usesEphemeralStore = isUITesting || runsMacRealModelTest
+        let persistenceTestRunID = try LaunchArguments.persistenceTestRunID()
         let configuration = ManifoldConfiguration(appName: appName, bundleIdentifier: bundleIdentifier)
 
         // Consume the cross-process App Group slot before bootstrap work. Its
@@ -154,7 +158,20 @@ final class AppEnvironment {
         // the two branches' closures don't reliably unify to the same
         // inferred type under strict concurrency checking.
         let makeModelContainer: @MainActor () throws -> ModelContainer
-        if usesEphemeralStore {
+        if let persistenceTestRunID {
+            let storeDirectory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("ManifoldRelaunchTests", isDirectory: true)
+                .appendingPathComponent(persistenceTestRunID.uuidString, isDirectory: true)
+            try FileManager.default.createDirectory(at: storeDirectory, withIntermediateDirectories: true)
+            makeModelContainer = {
+                let config = ModelConfiguration(
+                    storeName,
+                    url: storeDirectory.appendingPathComponent("store.sqlite"),
+                    cloudKitDatabase: .none
+                )
+                return try ModelContainerFactory.makeContainer(configurations: [config])
+            }
+        } else if usesEphemeralStore {
             makeModelContainer = {
                 let config = ModelConfiguration(storeName, isStoredInMemoryOnly: true)
                 return try ModelContainerFactory.makeContainer(configurations: [config])
@@ -256,7 +273,15 @@ final class AppEnvironment {
             Log.persistence.error("Failed to load cloud endpoints: \(String(describing: error), privacy: .public)")
         }
 
-        let sessionManager = SessionManagerViewModel()
+        let sessionManager: SessionManagerViewModel
+        if let persistenceTestRunID {
+            guard let testDefaults = UserDefaults(
+                suiteName: "com.manifoldkit.UITestSessions.\(persistenceTestRunID.uuidString)"
+            ) else { throw PersistenceTestConfigurationError.unavailableDefaults }
+            sessionManager = SessionManagerViewModel(userDefaults: testDefaults)
+        } else {
+            sessionManager = SessionManagerViewModel()
+        }
         await sessionManager.configureAndLoad(bootstrap: bootstrap)
 
         if let restored = await sessionManager.selectInitialSession() {

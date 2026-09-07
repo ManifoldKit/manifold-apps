@@ -125,6 +125,7 @@ extension XCTestCase {
         }
         guard row.waitForExistence(timeout: 5), !row.frame.isEmpty else { return false }
 
+        print("FEATURE_NAVIGATION id=\(featureID) row=\(row.frame) viewport=\(featureList.frame) hittable=\(row.isHittable)")
         if row.isHittable {
             row.tap()
         } else {
@@ -220,14 +221,23 @@ extension XCTestCase {
     }
 
     private func identifiedSessionRow(app: XCUIApplication) -> XCUIElement {
-        let identifiedCell = app.cells.matching(
+        // Native macOS rows expose their identified content as StaticText.
+        // Match the app-owned identifier across element types so a visible
+        // sidebar is not mistaken for a compact detail that needs a swipe.
+        app.descendants(matching: .any).matching(
             NSPredicate(format: "identifier == 'session-row'")
         ).firstMatch
-        if identifiedCell.exists { return identifiedCell }
+    }
 
-        return app.otherElements.matching(
-            NSPredicate(format: "identifier == 'session-row'")
-        ).firstMatch
+    /// Tap the editing area of the real multiline composer. On iPad its
+    /// accessibility frame includes a horizontal scrollbar across the center;
+    /// stay inside the field but above that scrollbar before normal typeText.
+    func tapMessageEditingArea(_ input: XCUIElement) {
+        #if os(iOS)
+        input.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.20)).tap()
+        #else
+        input.tap()
+        #endif
     }
 
     // MARK: - Screenshots

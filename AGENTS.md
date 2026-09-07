@@ -54,6 +54,13 @@ but is overridable for hosts without that simulator installed (e.g. an
 iPhone-17-generation-only Mac): `make test IOS_DESTINATION='platform=iOS
 Simulator,name=iPhone 17 Pro'`.
 
+For a UI regression that must relaunch the same store, launch with `--uitesting`
+and a fresh UUID in `MANIFOLD_UI_TEST_STORE_ID`. Reuse that UUID only within the
+test: it selects a separate app-temporary SwiftData directory and session
+preferences, never the production store. Ordinary `--uitesting` remains
+in-memory. An invalid UUID fails startup; the environment key is ignored
+outside `--uitesting`. Do not claim relaunch persistence from an in-memory run.
+
 The full UI suite belongs to `make test` and runs on the simulator/macOS. The
 physical gate builds signed products once, runs exactly one real Foundation
 turn against an isolated UI-test store, then inspects the xcresult to prove that
