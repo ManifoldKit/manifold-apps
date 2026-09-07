@@ -858,10 +858,16 @@ final class AppIntentsUITests: XCTestCase {
     private func openAppIntentsFeature(in app: XCUIApplication) {
         tapFeatureSidebarButton("appintents", in: app)
 
-        XCTAssertTrue(
-            waitForElement(app.descendants(matching: .any)["appintents-feature-view"], timeout: 5),
-            "AppIntents feature should render its live view"
+        let featureAppeared = waitForElement(
+            app.descendants(matching: .any)["appintents-feature-view"], timeout: 5
         )
+        if !featureAppeared {
+            // Keep failure evidence in the job log even when the runner does
+            // not upload XCTest attachments. This app uses an isolated test store.
+            print("APPINTENTS_NAVIGATION_FAILURE\n\(app.debugDescription)")
+            captureScreenshot(name: "AppIntents-Navigation-Failure")
+        }
+        XCTAssertTrue(featureAppeared, "AppIntents feature should render its live view")
     }
 
     private func openChatFeature(in app: XCUIApplication) {

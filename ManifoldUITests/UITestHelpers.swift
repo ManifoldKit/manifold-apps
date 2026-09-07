@@ -125,6 +125,7 @@ extension XCTestCase {
         }
         guard row.waitForExistence(timeout: 5), !row.frame.isEmpty else { return false }
 
+        print("FEATURE_NAVIGATION id=\(featureID) row=\(row.frame) viewport=\(featureList.frame) hittable=\(row.isHittable)")
         if row.isHittable {
             row.tap()
         } else {
