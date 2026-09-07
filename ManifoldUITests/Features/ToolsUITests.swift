@@ -61,7 +61,7 @@ final class ToolsUITests: XCTestCase {
             XCTFail("Message input not found")
             return
         }
-        input.tap()
+        tapMessageEditingArea(input)
         input.typeText("Write the approval result file")
 
         let sendButton = app.buttons["Send message"]

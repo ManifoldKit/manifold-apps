@@ -155,7 +155,7 @@ final class ExploreUITests: XCTestCase {
             XCTFail("A persisted-store launch should expose the scripted chat composer")
             return
         }
-        input.tap()
+        tapMessageEditingArea(input)
         input.typeText(message)
         let send = app.buttons["Send message"]
         XCTAssertTrue(send.waitForExistence(timeout: 5) && send.isEnabled)

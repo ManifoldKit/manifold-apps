@@ -228,6 +228,17 @@ extension XCTestCase {
         ).firstMatch
     }
 
+    /// Tap the editing area of the real multiline composer. On iPad its
+    /// accessibility frame includes a horizontal scrollbar across the center;
+    /// stay inside the field but above that scrollbar before normal typeText.
+    func tapMessageEditingArea(_ input: XCUIElement) {
+        #if os(iOS)
+        input.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.20)).tap()
+        #else
+        input.tap()
+        #endif
+    }
+
     // MARK: - Screenshots
 
     /// Takes a screenshot and attaches it to the current test for debugging.

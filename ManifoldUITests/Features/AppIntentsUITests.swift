@@ -751,7 +751,7 @@ final class AppIntentsUITests: XCTestCase {
             XCTFail("Message input should exist for the AppIntent tool turn")
             return
         }
-        input.tap()
+        tapMessageEditingArea(input)
         input.typeText("Use the reminder tool")
         let sendButton = app.buttons["Send message"]
         XCTAssertTrue(waitForElement(sendButton, timeout: 3) && sendButton.isEnabled)

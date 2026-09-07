@@ -66,7 +66,7 @@ final class SmokeUITests: XCTestCase {
             return
         }
 
-        input.tap()
+        tapMessageEditingArea(input)
         input.typeText("Hello from UI test")
 
         let sendButton = app.buttons["Send message"]
@@ -123,7 +123,7 @@ final class SmokeUITests: XCTestCase {
             XCTFail("Message input must exist before seeding the first session")
             return
         }
-        initialInput.tap()
+        tapMessageEditingArea(initialInput)
         initialInput.typeText("Hello from UI test")
         let initialSendButton = app.buttons["Send message"]
         XCTAssertTrue(
