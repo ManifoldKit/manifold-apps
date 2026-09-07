@@ -220,12 +220,10 @@ extension XCTestCase {
     }
 
     private func identifiedSessionRow(app: XCUIApplication) -> XCUIElement {
-        let identifiedCell = app.cells.matching(
-            NSPredicate(format: "identifier == 'session-row'")
-        ).firstMatch
-        if identifiedCell.exists { return identifiedCell }
-
-        return app.otherElements.matching(
+        // Native macOS rows expose their identified content as StaticText.
+        // Match the app-owned identifier across element types so a visible
+        // sidebar is not mistaken for a compact detail that needs a swipe.
+        app.descendants(matching: .any).matching(
             NSPredicate(format: "identifier == 'session-row'")
         ).firstMatch
     }

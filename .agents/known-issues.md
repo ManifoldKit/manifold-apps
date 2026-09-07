@@ -144,3 +144,12 @@ require exactly two unpinned nonempty chats, use the released newest-first
 `updatedAt` ordering to select the second row, and assert the actual older
 `User said:` bubble before relaunch. A sidebar title alone does not prove the
 active conversation.
+
+## Sidebar visibility must include native macOS row text
+
+Mac Explore's first navigation failed in `app.swipeRight()` although the native
+sidebar was already visible. The captured hierarchy exposed `session-row` as
+StaticText; the shared helper only queried Cell and Other. Match the exact
+app-owned identifier across all element types so the existing session row
+proves sidebar visibility before any compact-navigation fallback. Keep the
+identifier constraint: an arbitrary cell or static text is not sidebar proof.
