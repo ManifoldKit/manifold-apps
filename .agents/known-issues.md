@@ -153,3 +153,23 @@ StaticText; the shared helper only queried Cell and Other. Match the exact
 app-owned identifier across all element types so the existing session row
 proves sidebar visibility before any compact-navigation fallback. Keep the
 identifier constraint: an arbitrary cell or static text is not sidebar proof.
+
+## iPad multiline composer tests must avoid the scrollbar hit region
+
+Five chat-entry tests failed with no keyboard focus after a generic TextField
+tap on iPad, including four unchanged tests reproduced on main. Interactive
+click/type/send worked. The captured 22pt-high field included a horizontal
+scrollbar across its center: the default XCTest hit point was in that band.
+Tap inside the same field at normalized x=0.05, y=0.20, above the scrollbar,
+then use ordinary typeText and the existing completed-turn assertions. This
+changed the complete iPad target from five focus failures to 47 passes and one
+expected physical-device skip. Keep this interaction in tapMessageEditingArea;
+do not inject text into app state or weaken the conversation assertions.
+
+## CUA text grouping is not an XCTest selector contract
+
+CUA displayed the Mac theme preview heading and radius as combined text, but
+XCTest exposed the radius separately with theming-corner-radius-label. A query
+for CUA's merged string failed the complete Mac target. Use the captured XCTest
+identifier and exact label/value (Bubble corner radius: 20pt or 22pt), and query
+the native preset as a radio button. The corrected complete Mac target passed.
