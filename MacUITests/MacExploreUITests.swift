@@ -57,19 +57,41 @@ final class MacExploreUITests: XCTestCase {
         let explore = app.descendants(matching: .any)["explore-root"]
         guard explore.waitForExistence(timeout: 5) else { return false }
 
-        for _ in 0..<maximumScrolls {
+        for attempt in 0..<maximumScrolls {
             if element.exists && element.isHittable {
                 element.tap()
                 return true
             }
+            logExploreGeometry(phase: "before swipe \(attempt + 1)", explore: explore, target: element)
+            captureScreenshot(name: "Mac-Explore-Before-Scroll-\(attempt + 1)")
             explore.swipeUp()
+            logExploreGeometry(phase: "after swipe \(attempt + 1)", explore: explore, target: element)
+            captureScreenshot(name: "Mac-Explore-After-Scroll-\(attempt + 1)")
         }
 
         if element.exists && element.isHittable {
             element.tap()
             return true
         }
+        logExploreGeometry(phase: "failure", explore: explore, target: element)
+        captureScreenshot(name: "Mac-Explore-Scroll-Failure")
+        if explore.exists {
+            print("[MacExplore] failure Explore AX tree:\n\(explore.debugDescription)")
+        }
+        if element.exists {
+            print("[MacExplore] failure target AX tree:\n\(element.debugDescription)")
+        }
         return false
+    }
+
+    private func logExploreGeometry(phase: String, explore: XCUIElement, target: XCUIElement) {
+        let exploreExists = explore.exists
+        let targetExists = target.exists
+        let exploreDescription = exploreExists ? "exists=true frame=\(explore.frame)" : "exists=false"
+        let targetDescription = targetExists
+            ? "exists=true hittable=\(target.isHittable) frame=\(target.frame)"
+            : "exists=false"
+        print("[MacExplore] \(phase): explore \(exploreDescription); target \(targetDescription)")
     }
 
     /// XCTest preserves the SwiftUI identifier on the radius child. CUA's
