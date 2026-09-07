@@ -15,18 +15,25 @@ final class MacExploreUITests: XCTestCase {
         XCTAssertTrue(tapFeatureSidebarRow("explore", app: app))
         XCTAssertTrue(app.descendants(matching: .any)["explore-root"].waitForExistence(timeout: 5))
 
-        let readout = app.descendants(matching: .any)["theming-corner-radius-label"]
-        XCTAssertTrue(readout.waitForExistence(timeout: 5))
-        let standard = readout.label
+        XCTAssertTrue(
+            themeReadout(radius: 20).waitForExistence(timeout: 5),
+            "Standard must render the live preview's 20pt bubble radius"
+        )
         captureScreenshot(name: "Mac-Explore-Component-Examples")
-        let brand = app.buttons["Brand"]
+        let brand = app.radioButtons["Brand"]
         XCTAssertTrue(tapExploreElement(brand), "Brand must be reachable through the native Explore scroll path")
-        XCTAssertNotEqual(readout.label, standard)
+        XCTAssertTrue(
+            themeReadout(radius: 22).waitForExistence(timeout: 5),
+            "Brand must render the live preview's 22pt bubble radius"
+        )
         captureScreenshot(name: "Mac-Explore-Brand-Theme")
 
         let reset = app.descendants(matching: .any)["theming-reset-button"]
         XCTAssertTrue(tapExploreElement(reset), "Reset must be reachable through the native Explore scroll path")
-        XCTAssertEqual(readout.label, standard)
+        XCTAssertTrue(
+            themeReadout(radius: 20).waitForExistence(timeout: 5),
+            "Reset must restore the Standard live preview's 20pt bubble radius"
+        )
 
         let models = app.descendants(matching: .any)["explore-show-models"]
         XCTAssertTrue(tapExploreElement(models), "Models must be reachable through the native Explore scroll path")
@@ -63,5 +70,15 @@ final class MacExploreUITests: XCTestCase {
             return true
         }
         return false
+    }
+
+    /// macOS combines the preview heading and radius into one native static
+    /// text element, exposing it as a value rather than the child view's
+    /// SwiftUI accessibility identifier.
+    private func themeReadout(radius: Int) -> XCUIElement {
+        let expected = "Live preview Bubble corner radius: \(radius)pt"
+        return app.staticTexts.matching(
+            NSPredicate(format: "value == %@ OR label == %@", expected, expected)
+        ).firstMatch
     }
 }
