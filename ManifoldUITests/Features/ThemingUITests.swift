@@ -80,6 +80,13 @@ final class ThemingUITests: XCTestCase {
             tapFeatureSidebarRow("cloud", app: app),
             "Sidebar should expose a selectable Cloud row"
         )
+        let cloudTitle = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label == 'Cloud APIs' OR value == 'Cloud APIs'")
+        ).firstMatch
+        XCTAssertTrue(
+            waitForElement(cloudTitle, timeout: 5),
+            "Cloud selection must finish presenting the existing API configuration surface before reopening the sidebar"
+        )
 
         navigateToTheming()
 
@@ -103,8 +110,13 @@ final class ThemingUITests: XCTestCase {
     /// "Theming" feature row to select `ThemingFeature` in `RootView`'s
     /// `NavigationSplitView` detail column.
     private func navigateToTheming() {
+        let selectedTheming = tapFeatureSidebarRow("theming", app: app)
+        if !selectedTheming {
+            captureScreenshot(name: "Theming-Navigation-Failure")
+            print("[Theming] failed to select Theming sidebar row:\n\(app.debugDescription)")
+        }
         XCTAssertTrue(
-            tapFeatureSidebarRow("theming", app: app),
+            selectedTheming,
             "Theming row should become selectable after bounded feature-list scrolling"
         )
 
