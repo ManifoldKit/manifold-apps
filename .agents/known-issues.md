@@ -186,3 +186,7 @@ when the native control is hittable. For XCUIElement's Mac scroll event, negativ
 deltaY reveals lower content and positive reveals higher content. A full short-
 window target proved the original failure and the corrected direction; do not
 resize the window inside tests or replace real taps with state injection.
+
+## UI tests must observe feature arrival before navigating away again
+
+Hosted iPhone Theming coverage selected Cloud and immediately reopened the sidebar. The initial Theming route passed, but the return route could fail because `showSidebarIfNeeded` accepted an existing session accessibility node while `feature-sidebar-list` was absent during the transition. The test also had no assertion that Cloud actually replaced Theming. Await the real `APIConfigurationView` title (`Cloud APIs`, using the same label/value predicate as CloudUITests) after the Cloud tap, then navigate back and retain the restored Classic readout assertion. This keeps synchronization local to the test and leaves shared sidebar behavior unchanged. A complete iPhone negative-control run with an impossible title failed only the new arrival assertion; after exact restoration the Theming round trip passed. Failure-only screenshots and AX output remain for any subsequent navigation failure.
