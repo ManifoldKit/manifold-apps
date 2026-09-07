@@ -173,3 +173,16 @@ XCTest exposed the radius separately with theming-corner-radius-label. A query
 for CUA's merged string failed the complete Mac target. Use the captured XCTest
 identifier and exact label/value (Bubble corner radius: 20pt or 22pt), and query
 the native preset as a radio button. The corrected complete Mac target passed.
+
+## Coarse Mac UI-test swipes can skip the target entirely
+
+Mac Explore's Brand radio button existed but stayed non-hittable on hosted
+macOS 15.7.9. Diagnostic geometry showed one fast swipe moved it from below
+the scroll viewport to above it; subsequent downward scrolling never recovered.
+A shorter local macOS 26 window reproduced the same failure, while ordinary
+user scrolling and Brand/reset worked. Use bounded incremental scroll events,
+recompute direction from the target and viewport frames each time, and tap only
+when the native control is hittable. For XCUIElement's Mac scroll event, negative
+deltaY reveals lower content and positive reveals higher content. A full short-
+window target proved the original failure and the corrected direction; do not
+resize the window inside tests or replace real taps with state injection.

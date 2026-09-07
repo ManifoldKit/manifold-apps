@@ -53,7 +53,8 @@ final class MacExploreUITests: XCTestCase {
         captureScreenshot(name: "Mac-Explore-Cloud-Providers")
     }
 
-    private func tapExploreElement(_ element: XCUIElement, maximumScrolls: Int = 4) -> Bool {
+    @MainActor
+    private func tapExploreElement(_ element: XCUIElement, maximumScrolls: Int = 12) -> Bool {
         let explore = app.descendants(matching: .any)["explore-root"]
         guard explore.waitForExistence(timeout: 5) else { return false }
 
@@ -62,10 +63,35 @@ final class MacExploreUITests: XCTestCase {
                 element.tap()
                 return true
             }
-            logExploreGeometry(phase: "before swipe \(attempt + 1)", explore: explore, target: element)
+
+            guard element.exists else {
+                logExploreGeometry(phase: "target unavailable before scroll \(attempt + 1)", explore: explore, target: element)
+                break
+            }
+
+            let viewport = explore.frame
+            let targetFrame = element.frame
+            guard !viewport.isEmpty, !targetFrame.isEmpty else {
+                logExploreGeometry(phase: "missing geometry before scroll \(attempt + 1)", explore: explore, target: element)
+                break
+            }
+
+            if targetFrame.minY >= viewport.minY && targetFrame.maxY <= viewport.maxY {
+                logExploreGeometry(phase: "target inside viewport \(attempt + 1)", explore: explore, target: element)
+                if waitForHittable(element, timeout: 1) {
+                    element.tap()
+                    return true
+                }
+                break
+            }
+
+            let deltaY = targetFrame.minY < viewport.minY
+                ? min(viewport.height / 3, 160)
+                : -min(viewport.height / 3, 160)
+            logExploreGeometry(phase: "before scroll \(attempt + 1)", explore: explore, target: element)
             captureScreenshot(name: "Mac-Explore-Before-Scroll-\(attempt + 1)")
-            explore.swipeUp()
-            logExploreGeometry(phase: "after swipe \(attempt + 1)", explore: explore, target: element)
+            explore.scroll(byDeltaX: 0, deltaY: deltaY)
+            logExploreGeometry(phase: "after scroll \(attempt + 1)", explore: explore, target: element)
             captureScreenshot(name: "Mac-Explore-After-Scroll-\(attempt + 1)")
         }
 
@@ -84,6 +110,7 @@ final class MacExploreUITests: XCTestCase {
         return false
     }
 
+    @MainActor
     private func logExploreGeometry(phase: String, explore: XCUIElement, target: XCUIElement) {
         let exploreExists = explore.exists
         let targetExists = target.exists
@@ -94,8 +121,21 @@ final class MacExploreUITests: XCTestCase {
         print("[MacExplore] \(phase): explore \(exploreDescription); target \(targetDescription)")
     }
 
+    @MainActor
+    private func waitForHittable(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate { object, _ in
+                guard let element = object as? XCUIElement, element.exists else { return false }
+                return element.isHittable
+            },
+            object: element
+        )
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+    }
+
     /// XCTest preserves the SwiftUI identifier on the radius child. CUA's
     /// merged presentation is not the XCUITest accessibility hierarchy.
+    @MainActor
     private func themeReadout(radius: Int) -> XCUIElement {
         let expected = "Bubble corner radius: \(radius)pt"
         return app.staticTexts.matching(
