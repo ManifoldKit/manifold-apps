@@ -72,13 +72,17 @@ final class MacExploreUITests: XCTestCase {
         return false
     }
 
-    /// macOS combines the preview heading and radius into one native static
-    /// text element, exposing it as a value rather than the child view's
-    /// SwiftUI accessibility identifier.
+    /// XCTest preserves the SwiftUI identifier on the radius child. CUA's
+    /// merged presentation is not the XCUITest accessibility hierarchy.
     private func themeReadout(radius: Int) -> XCUIElement {
-        let expected = "Live preview Bubble corner radius: \(radius)pt"
+        let expected = "Bubble corner radius: \(radius)pt"
         return app.staticTexts.matching(
-            NSPredicate(format: "value == %@ OR label == %@", expected, expected)
+            NSPredicate(
+                format: "identifier == %@ AND (value == %@ OR label == %@)",
+                "theming-corner-radius-label",
+                expected,
+                expected
+            )
         ).firstMatch
     }
 }
