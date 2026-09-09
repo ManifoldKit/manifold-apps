@@ -41,6 +41,26 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(hasEmptyState, "Should show a welcome message, empty placeholder, or no-model state on launch")
     }
 
+    func testWelcomeBrowseModelsOpensModelManagement() throws {
+        app.terminate()
+        app = launchApp(additionalArguments: ["--no-model-welcome-test"])
+        openChatDetailIfNeeded(app: app)
+
+        let browseModels = app.buttons["chat-model-management-button"]
+        XCTAssertTrue(
+            browseModels.waitForExistence(timeout: 10) && browseModels.isHittable,
+            "A launch with no model must offer a working model-management action"
+        )
+        browseModels.tap()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["model-management-tab-picker"]
+                .waitForExistence(timeout: 10),
+            "The welcome action must open the real model browser, downloader, and storage surface"
+        )
+        captureScreenshot(name: "Welcome-Model-Management")
+    }
+
     // MARK: - ChatFlowUITests.testSendMessageFlow
 
     func testSendMessageFlow() throws {

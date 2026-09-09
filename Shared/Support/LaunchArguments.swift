@@ -51,6 +51,13 @@ enum LaunchArguments {
         isUITesting && CommandLine.arguments.contains("--ios-real-foundation-test")
     }
 
+    /// Leaves the deterministic UI-test inference service unloaded so the
+    /// welcome screen's production model-management route can be exercised.
+    /// Ordinary UI tests keep their immediately ready scripted backend.
+    static var showsNoModelWelcome: Bool {
+        isUITesting && CommandLine.arguments.contains("--no-model-welcome-test")
+    }
+
     /// The installed MLX directory exercised by the Manifold Mac hardware gate.
     /// The shell gate passes this through explicitly, while the default keeps
     /// the one-command local workflow useful on the maintainer's machine.

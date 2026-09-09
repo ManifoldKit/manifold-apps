@@ -116,7 +116,12 @@ final class AppEnvironment {
         let toolApprovalGate = UIToolApprovalGate(policy: .askOncePerSession)
 
         let inferenceService: InferenceService
-        if isUITesting
+        if LaunchArguments.showsNoModelWelcome {
+            inferenceService = InferenceService(
+                toolRegistry: toolRegistry,
+                toolApprovalGate: toolApprovalGate
+            )
+        } else if isUITesting
             && !LaunchArguments.runsMacLocalModelTest
             && !runsMacRealModelTest
             && !runsIOSRealFoundationTest {
