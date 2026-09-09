@@ -15,9 +15,9 @@ import ManifoldTools
 /// `ManifoldTools` package product this file imports.
 enum ManifoldToolset {
 
-    /// Names of the tools registered by ``register(on:root:)``. A later
-    /// Scenarios feature (if ported) can use this to reset to the baseline
-    /// set between scenarios, mirroring core's `DemoScenarioRunner`.
+    /// Names of the useful reference tools registered by ``register(on:root:)``.
+    /// A later Scenarios feature (if ported) can use this to reset to the
+    /// baseline set between scenarios, mirroring core's `DemoScenarioRunner`.
     static let baselineNames: [String] = [
         "calc",
         "now",
@@ -25,7 +25,7 @@ enum ManifoldToolset {
         "list_dir",
         "sample_repo_search",
         "write_file"
-    ] + FailureTools.names
+    ]
 
     /// The deliberately small catalog offered to local and unknown backends.
     /// Small instruct models lose reliability as the number of tool schemas
@@ -61,7 +61,6 @@ enum ManifoldToolset {
         registry.register(ListDirTool.makeExecutor(root: root))
         registry.register(SampleRepoSearchTool.makeExecutor(root: root))
         registry.register(WriteFileTool.makeExecutor(root: root))
-        FailureTools.register(on: registry)
     }
 
     /// Curates the schemas offered to the active model without removing any
@@ -69,7 +68,7 @@ enum ManifoldToolset {
     /// published `APIProvider` identities because cloud lifecycle descriptors
     /// use those stable provider codes as `activeBackendName` (not every code,
     /// notably `openAIResponses`, is a `BackendName` well-known constant).
-    /// Remote/API-key providers receive the full reference/failure catalog;
+    /// Remote/API-key providers receive the full useful reference catalog;
     /// Ollama, LM Studio, and unrecognised identities stay at the conservative
     /// five-tool ceiling.
     @MainActor

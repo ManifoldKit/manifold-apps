@@ -18,7 +18,7 @@ final class ToolsUITests: XCTestCase {
         let advertisementSummary = app.descendants(matching: .any)["tool-advertisement-summary"]
         XCTAssertTrue(advertisementSummary.waitForExistence(timeout: 5))
         XCTAssertTrue(
-            advertisementSummary.label.contains("5 of 8 tools advertised"),
+            advertisementSummary.label.contains("5 of 6 tools advertised"),
             "The Ollama-identity approval backend should receive the five-tool local catalog"
         )
 
@@ -94,25 +94,24 @@ final class ToolsUITests: XCTestCase {
         captureScreenshot(name: "Tools-Approved-Completed")
     }
 
-    func testCloudBackendAdvertisesFullReferenceCatalog() {
+    func testCloudBackendAdvertisesUsefulReferenceCatalogOnly() {
         app = launchApp(additionalArguments: ["--cloud-tool-catalog-test"])
         navigateToTools()
 
         let advertisementSummary = app.descendants(matching: .any)["tool-advertisement-summary"]
         XCTAssertTrue(advertisementSummary.waitForExistence(timeout: 5))
         XCTAssertTrue(
-            advertisementSummary.label.contains("8 of 8 tools advertised"),
-            "OpenAI Responses should retain the complete reference and failure-tool catalog"
+            advertisementSummary.label.contains("6 of 6 tools advertised"),
+            "OpenAI Responses should receive every useful reference tool"
         )
 
-        let rateLimitedTool = app.descendants(matching: .any)["tool-row-fakeRateLimited"]
-        let toolsBrowser = app.descendants(matching: .any)["tools-browser"]
-        for _ in 0..<8 where !rateLimitedTool.exists {
-            toolsBrowser.swipeUp()
-        }
-        XCTAssertTrue(
-            rateLimitedTool.waitForExistence(timeout: 3),
-            "The full cloud catalog should deliberately preserve failure tools"
+        XCTAssertFalse(
+            app.descendants(matching: .any)["tool-row-fakeRateLimited"].exists,
+            "Demo rate-limit fixtures must not be advertised to cloud models or shown to users"
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)["tool-row-fakeMCPLookup"].exists,
+            "Demo MCP-failure fixtures must not be advertised to cloud models or shown to users"
         )
     }
 
