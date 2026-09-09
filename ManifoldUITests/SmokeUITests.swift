@@ -46,7 +46,14 @@ final class SmokeUITests: XCTestCase {
         app = launchApp(additionalArguments: ["--no-model-welcome-test"])
         openChatDetailIfNeeded(app: app)
 
-        let browseModels = app.buttons["chat-model-management-button"]
+        // Compact and regular-width layouts can surface either the first-run
+        // funnel or the chat empty state. Both are production entry points to
+        // the same host-supplied model-management sheet.
+        let browseModels = app.buttons.matching(
+            NSPredicate(
+                format: "identifier == 'first-run-browse-models-button' OR identifier == 'chat-model-management-button'"
+            )
+        ).firstMatch
         XCTAssertTrue(
             browseModels.waitForExistence(timeout: 10) && browseModels.isHittable,
             "A launch with no model must offer a working model-management action"
