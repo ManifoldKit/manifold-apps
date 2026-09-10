@@ -68,6 +68,28 @@ final class SmokeUITests: XCTestCase {
         captureScreenshot(name: "Welcome-Model-Management")
     }
 
+    func testDeviceInfoShowsAppBuildIdentity() throws {
+        openChatDetailIfNeeded(app: app)
+
+        let infoButton = app.buttons["Device Info"]
+        XCTAssertTrue(
+            infoButton.waitForExistence(timeout: 10) && infoButton.isHittable,
+            "The existing top Device Info button should remain the single build-information entry point"
+        )
+        infoButton.tap()
+
+        let buildIdentity = app.descendants(matching: .any)["app-build-identity"]
+        XCTAssertTrue(
+            buildIdentity.waitForExistence(timeout: 10),
+            "The existing Device Info popover should include the host app's build identity"
+        )
+        XCTAssertTrue(
+            buildIdentity.label.contains("Manifold 0.1.0 (2)"),
+            "Build identity should expose the app version and build number; found: \(buildIdentity.label)"
+        )
+        captureScreenshot(name: "Device-Info-App-Build")
+    }
+
     // MARK: - ChatFlowUITests.testSendMessageFlow
 
     func testSendMessageFlow() throws {

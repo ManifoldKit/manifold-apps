@@ -290,6 +290,13 @@ struct RootView: View {
             // the receiver, so calling it first would drop the switcher.
             ChatView(showModelManagement: $showModelManagement)
                 .chatModelSwitcher { modelSwitcherContent }
+                .chatDeviceInfoContent {
+                    LabeledContent("App Build") {
+                        Text(BuildIdentity().detailedDisplayName)
+                            .textSelection(.enabled)
+                            .accessibilityIdentifier("app-build-identity")
+                    }
+                }
                 // APIConfigurationView and its nested editor both read the
                 // store from EnvironmentValues. Attach it to the supplied
                 // presentation content so ChatView's settings and API-key
