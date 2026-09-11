@@ -15,7 +15,7 @@ packages:
   # repointing at a branch or a local path.
   ManifoldKit:
     url: https://github.com/ManifoldKit/ManifoldKit
-    minorVersion: 0.77.0
+    minorVersion: 0.78.0
   ManifoldMLX:
     url: https://github.com/ManifoldKit/manifold-mlx
     minorVersion: 0.6.0
@@ -47,7 +47,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.manifoldkit.Manifold
         MARKETING_VERSION: 0.1.0
-        CURRENT_PROJECT_VERSION: 1
+        CURRENT_PROJECT_VERSION: 2
         CODE_SIGN_ENTITLEMENTS: Mobile/Manifold.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_VERSION: "6.0"
@@ -63,6 +63,24 @@ targets:
         # composer fault banner on first launch (same as core's
         # MinimalExample).
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "Voice input transcribes your speech into the message composer."
+    postBuildScripts:
+      - name: Record source revision in Info.plist
+        basedOnDependencyAnalysis: false
+        script: |
+          set -eu
+          revision="${MANIFOLD_SOURCE_REVISION:-}"
+          if [ -z "$revision" ]; then
+            revision="$(/usr/bin/git -C "$SRCROOT" rev-parse --short=12 HEAD 2>/dev/null || true)"
+            if [ -n "$revision" ] && [ -n "$(/usr/bin/git -C "$SRCROOT" status --porcelain --untracked-files=normal)" ]; then
+              revision="${revision}-dirty"
+            fi
+          fi
+          if [ -z "$revision" ]; then
+            revision="unknown"
+          fi
+          plist="$TARGET_BUILD_DIR/$INFOPLIST_PATH"
+          /usr/libexec/PlistBuddy -c 'Delete :ManifoldSourceRevision' "$plist" >/dev/null 2>&1 || true
+          /usr/libexec/PlistBuddy -c "Add :ManifoldSourceRevision string $revision" "$plist"
 
   ManifoldMac:
     type: application
@@ -90,7 +108,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.manifoldkit.Manifold
         INFOPLIST_KEY_CFBundleDisplayName: Manifold
         MARKETING_VERSION: 0.1.0
-        CURRENT_PROJECT_VERSION: 1
+        CURRENT_PROJECT_VERSION: 2
         SWIFT_VERSION: "6.0"
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "Voice input transcribes your speech into the message composer."
@@ -102,6 +120,24 @@ targets:
           DEVELOPMENT_TEAM: ""
           CODE_SIGN_STYLE: Manual
           CODE_SIGN_IDENTITY: "-"
+    postBuildScripts:
+      - name: Record source revision in Info.plist
+        basedOnDependencyAnalysis: false
+        script: |
+          set -eu
+          revision="${MANIFOLD_SOURCE_REVISION:-}"
+          if [ -z "$revision" ]; then
+            revision="$(/usr/bin/git -C "$SRCROOT" rev-parse --short=12 HEAD 2>/dev/null || true)"
+            if [ -n "$revision" ] && [ -n "$(/usr/bin/git -C "$SRCROOT" status --porcelain --untracked-files=normal)" ]; then
+              revision="${revision}-dirty"
+            fi
+          fi
+          if [ -z "$revision" ]; then
+            revision="unknown"
+          fi
+          plist="$TARGET_BUILD_DIR/$INFOPLIST_PATH"
+          /usr/libexec/PlistBuddy -c 'Delete :ManifoldSourceRevision' "$plist" >/dev/null 2>&1 || true
+          /usr/libexec/PlistBuddy -c "Add :ManifoldSourceRevision string $revision" "$plist"
 
   ManifoldUITests:
     type: bundle.ui-testing
@@ -109,6 +145,7 @@ targets:
     sources:
       - ManifoldUITests
       - Shared/Support/LaunchArguments.swift
+      - Shared/Support/BuildIdentity.swift
       - Shared/Support/InboundPayload/InboundPayloadEnvelope.swift
       - Shared/Support/InboundPayload/Concurrency/PendingPayloadBuffer.swift
       - Shared/Features/AppIntents/InboundAppIntentRoute.swift

@@ -41,6 +41,55 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(hasEmptyState, "Should show a welcome message, empty placeholder, or no-model state on launch")
     }
 
+    func testWelcomeBrowseModelsOpensModelManagement() throws {
+        app.terminate()
+        app = launchApp(additionalArguments: ["--no-model-welcome-test"])
+        openChatDetailIfNeeded(app: app)
+
+        // Compact and regular-width layouts can surface either the first-run
+        // funnel or the chat empty state. Both are production entry points to
+        // the same host-supplied model-management sheet.
+        let browseModels = app.buttons.matching(
+            NSPredicate(
+                format: "identifier == 'first-run-browse-models-button' OR identifier == 'chat-model-management-button'"
+            )
+        ).firstMatch
+        XCTAssertTrue(
+            browseModels.waitForExistence(timeout: 10) && browseModels.isHittable,
+            "A launch with no model must offer a working model-management action"
+        )
+        browseModels.tap()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["model-management-tab-picker"]
+                .waitForExistence(timeout: 10),
+            "The welcome action must open the real model browser, downloader, and storage surface"
+        )
+        captureScreenshot(name: "Welcome-Model-Management")
+    }
+
+    func testDeviceInfoShowsAppBuildIdentity() throws {
+        openChatDetailIfNeeded(app: app)
+
+        let infoButton = app.buttons["Device Info"]
+        XCTAssertTrue(
+            infoButton.waitForExistence(timeout: 10) && infoButton.isHittable,
+            "The existing top Device Info button should remain the single build-information entry point"
+        )
+        infoButton.tap()
+
+        let buildIdentity = app.descendants(matching: .any)["app-build-identity"]
+        XCTAssertTrue(
+            buildIdentity.waitForExistence(timeout: 10),
+            "The existing Device Info popover should include the host app's build identity"
+        )
+        XCTAssertTrue(
+            buildIdentity.label.contains("Manifold 0.1.0 (2)"),
+            "Build identity should expose the app version and build number; found: \(buildIdentity.label)"
+        )
+        captureScreenshot(name: "Device-Info-App-Build")
+    }
+
     // MARK: - ChatFlowUITests.testSendMessageFlow
 
     func testSendMessageFlow() throws {
