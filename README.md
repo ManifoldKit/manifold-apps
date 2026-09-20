@@ -9,11 +9,15 @@ is executable documentation.
 ## Manifold (iOS)
 
 The consumer chat app — a single-session `ChatView` wired up with
-`ManifoldKit.quickStart()`, targeting iOS 18+.
+`ManifoldKit.quickStart()`, targeting iOS 26+.
 
 ## Manifold (macOS)
 
-The macOS-native Manifold build, targeting macOS 15+.
+The macOS-native Manifold build, targeting macOS 26+.
+
+Both apps require OS 26 or newer to match the published ManifoldMLX 0.6.2
+platform floor. Builds use published release ranges; CI runs on macOS 26 with
+Xcode 26.6 and the iOS 26.5 simulator.
 
 ## Building
 

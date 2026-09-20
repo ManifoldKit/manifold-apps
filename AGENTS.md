@@ -1,7 +1,7 @@
 # manifold-apps — guide for AI coding assistants
 
 Two native SwiftUI targets implement the flagship **Manifold** reference app:
-`Manifold` for iOS 18+ and `ManifoldMac` for macOS 15+. Both consume ManifoldKit by
+`Manifold` for iOS 26+ and `ManifoldMac` for macOS 26+. Both consume ManifoldKit by
 published tag (`https://github.com/ManifoldKit/ManifoldKit`, pinned
 `upToNextMinor` from a released version — see `project.yml`). Core
 ManifoldKit conventions (bootstrap recipe, sending messages, theming, tool
@@ -49,10 +49,10 @@ No `-derivedDataPath` flag — default DerivedData lives outside the repo
 deliberately; pointing it in-repo causes a package-resolution wedge (see
 ManifoldKit's `scripts/clean-build.sh` history, #2475).
 
-`IOS_DESTINATION` defaults to `iPhone 16` (matches `ci.yml`'s destination)
+`IOS_DESTINATION` defaults to `iPhone 17` (matches `ci.yml`'s destination)
 but is overridable for hosts without that simulator installed (e.g. an
-iPhone-17-generation-only Mac): `make test IOS_DESTINATION='platform=iOS
-Simulator,name=iPhone 17 Pro'`.
+iPhone-18-generation-only Mac): `make test IOS_DESTINATION='platform=iOS
+Simulator,name=iPhone 18 Pro'`.
 
 For a UI regression that must relaunch the same store, launch with `--uitesting`
 and a fresh UUID in `MANIFOLD_UI_TEST_STORE_ID`. Reuse that UUID only within the

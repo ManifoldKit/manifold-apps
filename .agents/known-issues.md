@@ -190,3 +190,14 @@ resize the window inside tests or replace real taps with state injection.
 ## UI tests must observe feature arrival before navigating away again
 
 Hosted iPhone Theming coverage selected Cloud and immediately reopened the sidebar. The initial Theming route passed, but the return route could fail because `showSidebarIfNeeded` accepted an existing session accessibility node while `feature-sidebar-list` was absent during the transition. The test also had no assertion that Cloud actually replaced Theming. Await the real `APIConfigurationView` title (`Cloud APIs`, using the same label/value predicate as CloudUITests) after the Cloud tap, then navigate back and retain the restored Classic readout assertion. This keeps synchronization local to the test and leaves shared sidebar behavior unchanged. A complete iPhone negative-control run with an impossible title failed only the new arrival assertion; after exact restoration the Theming round trip passed. Failure-only screenshots and AX output remain when Theming sidebar-row selection fails.
+
+## Fresh MLX resolution requires OS 26 app deployment targets
+
+On 2026-09-20, an unchanged iOS 18/macOS 15 app checkout resolved published
+manifold-mlx 0.6.2 and failed at `import ManifoldMLX`: that release raises both
+platform floors to 26.0. Existing cached products and earlier green CI do not
+prove a fresh resolution still builds. Align both app/test deployment targets
+with OS 26, keep the published `minorVersion` range starting at MLX 0.6.2, and
+run Mac UI tests on a macOS 26-or-newer runner. Both complete app builds passed
+on Xcode 27 after that alignment. The macOS 26 hosted image uses Xcode 26.6
+and an installed iPhone 17/iOS 26.5 simulator for the CI configuration.

@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData // needed for .modelContainer modifier type inference
 import ManifoldKit
 
-/// Manifold — the macOS app (macOS 15+).
+/// Manifold — the macOS app (macOS 26+).
 ///
 /// Builds the shared `AppEnvironment` composition root and shows
 /// `RootView`. Under `--uitesting`, `AppEnvironment.bootstrap` swaps in a

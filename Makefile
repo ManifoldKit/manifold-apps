@@ -1,11 +1,10 @@
 .PHONY: generate build test release-inputs device-test archive-ios testflight-upload mac-real-models clean
 
-# Overridable so a host with no "iPhone 16" simulator installed (e.g. an
-# iPhone-17-generation-only Mac) can still `make build`/`make test` locally:
-#   make test IOS_DESTINATION='platform=iOS Simulator,name=iPhone 17 Pro'
-# Default stays iPhone 16 so CI behavior (ci.yml, which hardcodes the same
-# default via the reusable workflow) is unchanged.
-IOS_DESTINATION ?= platform=iOS Simulator,name=iPhone 16
+# Overridable so a host with no "iPhone 17" simulator installed (e.g. an
+# iPhone-18-generation-only Mac) can still `make build`/`make test` locally:
+#   make test IOS_DESTINATION='platform=iOS Simulator,name=iPhone 18 Pro'
+# The default model matches CI; CI also selects its installed iOS 26.5 runtime.
+IOS_DESTINATION ?= platform=iOS Simulator,name=iPhone 17
 ARCHIVE_PATH ?= $(CURDIR)/.artifacts/Manifold.xcarchive
 EXPORT_OPTIONS_PLIST ?= $(CURDIR)/Release/TestFlightExportOptions.plist
 
