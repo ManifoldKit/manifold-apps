@@ -41,12 +41,9 @@ final class TurnLoopActionUITests: XCTestCase {
             "The real assistant-message action menu must offer Regenerate"
         )
 
-        let regenerated = waitForCompletedChatTurn(app: app, timeout: 10)
-        let statusAfterRegeneration = app.otherElements["chat-conversation"].value as? String ?? "<unavailable>"
-        XCTAssertEqual(
-            regenerated,
-            "Response complete: \(replacementAnswer)",
-            "Regenerate must produce the fixture's distinct replacement answer. Status: \(statusAfterRegeneration)"
+        XCTAssertTrue(
+            waitForExpectedAnswer(replacementAnswer, in: app, timeout: 10),
+            "Regenerate must produce the fixture's distinct replacement answer and complete the turn."
         )
         XCTAssertTrue(
             waitForElementToDisappear(originalAssistant, timeout: 5),
@@ -106,12 +103,9 @@ final class TurnLoopActionUITests: XCTestCase {
             messageBubble(role: "User", containing: editedPrompt, in: app).waitForExistence(timeout: 5),
             "The edited user prompt must appear in the transcript"
         )
-        let editedResponse = waitForCompletedChatTurn(app: app, timeout: 10)
-        let statusAfterEdit = app.otherElements["chat-conversation"].value as? String ?? "<unavailable>"
-        XCTAssertEqual(
-            editedResponse,
-            "Response complete: \(replacementAnswer)",
-            "Editing a user prompt must generate the fixture's downstream replacement answer. Status: \(statusAfterEdit)"
+        XCTAssertTrue(
+            waitForExpectedAnswer(replacementAnswer, in: app, timeout: 10),
+            "Editing a user prompt must generate the fixture's downstream replacement answer and complete the turn."
         )
         XCTAssertEqual(
             messageBubbleCount(role: "User", containing: editedPrompt, in: app),
@@ -173,19 +167,44 @@ final class TurnLoopActionUITests: XCTestCase {
             return
         }
         clickOrTap(send)
-        let completed = waitForCompletedChatTurn(app: app, timeout: 10)
-        if completed == nil {
+        XCTAssertTrue(
+            waitForExpectedAnswer(answer, in: app, timeout: 10),
+            "Sending \(prompt) must complete its deterministic turn with the fixture's exact answer."
+        )
+    }
+
+    @MainActor
+    private func waitForExpectedAnswer(
+        _ answer: String,
+        in app: XCUIApplication,
+        timeout: TimeInterval
+    ) -> Bool {
+        #if os(macOS)
+        // AppKit exposes chat-conversation as a Group without its SwiftUI
+        // accessibility value. Match the exact visible assistant response and
+        // require generation to have stopped instead of querying Other.
+        let response = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label == %@", "Assistant said: \(answer)")
+        ).firstMatch
+        let completed = response.waitForExistence(timeout: timeout)
+            && XCTWaiter.wait(
+                for: [XCTNSPredicateExpectation(
+                    predicate: NSPredicate(format: "exists == false"),
+                    object: app.buttons["Stop generation"]
+                )],
+                timeout: timeout
+            ) == .completed
+        #else
+        let completed = waitForCompletedChatTurn(app: app, timeout: timeout)
+            == "Response complete: \(answer)"
+        #endif
+        if !completed {
             let hierarchy = XCTAttachment(string: app.debugDescription)
-            hierarchy.name = "Turn failed before completion"
+            hierarchy.name = "Expected answer missing or turn incomplete"
             hierarchy.lifetime = .keepAlways
             add(hierarchy)
         }
-        let statusAfterSend = app.otherElements["chat-conversation"].value as? String ?? "<unavailable>"
-        XCTAssertEqual(
-            completed,
-            "Response complete: \(answer)",
-            "Sending \(prompt) must complete its deterministic turn. Status: \(statusAfterSend)"
-        )
+        return completed
     }
 
     @MainActor
