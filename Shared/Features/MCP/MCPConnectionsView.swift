@@ -11,6 +11,8 @@ struct MCPConnectionsView: View {
     @State private var consentStore = MCPDataDisclosureConsentStore()
     @State private var pendingConsent: MCPServerDescriptor?
     @State private var isAddingService = false
+    @State private var isVisible = false
+    @State private var isConfirmingConfigurationReset = false
     @State private var draftName = ""
     @State private var draftExecutablePath = ""
     @State private var draftArguments = ""
@@ -18,7 +20,18 @@ struct MCPConnectionsView: View {
 
     var body: some View {
         Group {
-            if coordinator.catalog.isEmpty {
+            if let error = coordinator.configurationLoadError {
+                ContentUnavailableView {
+                    Label("Saved servers unavailable", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(error)
+                } actions: {
+                    Button("Reset Saved Servers") {
+                        isConfirmingConfigurationReset = true
+                    }
+                    .accessibilityIdentifier("mcp-reset-saved-servers")
+                }
+            } else if coordinator.catalog.isEmpty {
                 ContentUnavailableView {
                     Label("No local servers configured", systemImage: "server.rack")
                 } description: {
@@ -38,15 +51,26 @@ struct MCPConnectionsView: View {
         }
         .navigationTitle("MCP")
         .accessibilityIdentifier("mcp-connections-root")
-        .task { coordinator.startListeningIfNeeded() }
-        .onDisappear { coordinator.shutdown() }
+        .onAppear {
+            isVisible = true
+            coordinator.startListeningIfNeeded()
+        }
+        .onDisappear {
+            isVisible = false
+            coordinator.shutdown()
+        }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .background { coordinator.shutdown() }
+            if phase == .background {
+                coordinator.shutdown()
+            } else if phase == .active && isVisible {
+                coordinator.startListeningIfNeeded()
+            }
         }
         .toolbar {
             Button("Add Local Server", systemImage: "plus") {
                 isAddingService = true
             }
+            .disabled(coordinator.configurationLoadError != nil)
         }
         .confirmationDialog(
             "Review data use",
@@ -68,6 +92,19 @@ struct MCPConnectionsView: View {
             if let descriptor = pendingConsent {
                 Text("\(descriptor.dataDisclosure)\n\nYou will only see this disclosure the first time you connect this service.")
             }
+        }
+        .confirmationDialog(
+            "Reset saved MCP servers?",
+            isPresented: $isConfirmingConfigurationReset,
+            titleVisibility: .visible
+        ) {
+            Button("Reset Saved Servers", role: .destructive) {
+                coordinator.resetSavedLocalServers()
+            }
+            .accessibilityIdentifier("mcp-confirm-reset-saved-servers")
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The unreadable saved server data will be deleted. You can then add local servers again.")
         }
         .sheet(isPresented: $isAddingService) {
             localServerConfiguration
@@ -174,7 +211,7 @@ struct MCPConnectionsView: View {
 @MainActor
 @Observable
 final class MCPConnectionCoordinator {
-    private let client = MCPClient()
+    private var client: MCPClient?
     private let configurationStore: MCPLocalServerConfigurationStore
     private var sourcesByID: [UUID: MCPToolSource] = [:]
     private var connectionAttempts: [UUID: UUID] = [:]
@@ -185,16 +222,23 @@ final class MCPConnectionCoordinator {
     private var eventsTask: Task<Void, Never>?
 
     private(set) var catalog: [MCPServerDescriptor]
+    private(set) var configurationLoadError: String?
 
-    init(configurationStore: MCPLocalServerConfigurationStore = .init()) {
+    init() {
+        let configurationStore = MCPLocalServerConfigurationStore()
         self.configurationStore = configurationStore
         self.catalog = MCPConnectionCatalog.services(configured: configurationStore.services)
+        self.configurationLoadError = configurationStore.loadError
         for descriptor in catalog { snapshotsByID[descriptor.id] = .disconnected }
     }
 
     func startListeningIfNeeded() {
         guard eventsTask == nil else { return }
-        let client = client
+        // Cancelling an AsyncStream iterator terminates this client's single
+        // event stream. Every new foreground/feature activation needs a client
+        // with a fresh stream, not an iterator on the old client.
+        let client = MCPClient()
+        self.client = client
         eventsTask = Task { [weak self, client] in
             for await event in client.connectionEvents {
                 guard !Task.isCancelled else { return }
@@ -211,6 +255,8 @@ final class MCPConnectionCoordinator {
         guard connectionAttempts[descriptor.id] == nil,
               sourcesByID[descriptor.id] == nil,
               !disconnectingIDs.contains(descriptor.id) else { return }
+        startListeningIfNeeded()
+        guard let client else { return }
         let attemptID = UUID()
         failedDisconnectIDs.remove(descriptor.id)
         connectionAttempts[descriptor.id] = attemptID
@@ -219,7 +265,6 @@ final class MCPConnectionCoordinator {
             $0.errorMessage = nil
             $0.toolCount = 0
         }
-        let client = client
         connectionTasks[descriptor.id] = Task { [weak self, client] in
             do {
                 let source = try await client.connect(descriptor)
@@ -264,6 +309,10 @@ final class MCPConnectionCoordinator {
 
     func disconnect(_ serverID: UUID) {
         guard !disconnectingIDs.contains(serverID) else { return }
+        guard let client else {
+            updateSnapshot(serverID) { $0 = .disconnected }
+            return
+        }
         disconnectingIDs.insert(serverID)
         failedDisconnectIDs.remove(serverID)
         connectionAttempts.removeValue(forKey: serverID)
@@ -274,10 +323,9 @@ final class MCPConnectionCoordinator {
             $0.errorMessage = nil
             $0.toolCount = 0
         }
-        let client = client
         Task { [weak self, client] in
             await client.disconnect(serverID: serverID)
-            guard let self else { return }
+            guard let self, self.client === client else { return }
             self.disconnectingIDs.remove(serverID)
             self.updateSnapshot(serverID) { $0 = .disconnected }
         }
@@ -286,7 +334,10 @@ final class MCPConnectionCoordinator {
     func shutdown() {
         eventsTask?.cancel()
         eventsTask = nil
-        connectionTasks.values.forEach { $0.cancel() }
+        let oldClient = client
+        client = nil
+        let inFlightTasks = Array(connectionTasks.values)
+        inFlightTasks.forEach { $0.cancel() }
         connectionTasks.removeAll()
         connectionAttempts.removeAll()
         sourcesByID.removeAll()
@@ -295,8 +346,19 @@ final class MCPConnectionCoordinator {
         for serverID in snapshotsByID.keys {
             snapshotsByID[serverID] = .disconnected
         }
-        let client = client
-        Task { await client.disconnectAll() }
+        if let oldClient {
+            Task {
+                for task in inFlightTasks { await task.value }
+                await oldClient.disconnectAll()
+            }
+        }
+    }
+
+    func resetSavedLocalServers() {
+        configurationStore.resetSavedConfigurations()
+        configurationLoadError = nil
+        catalog = MCPConnectionCatalog.services(configured: configurationStore.services)
+        snapshotsByID = Dictionary(uniqueKeysWithValues: catalog.map { ($0.id, .disconnected) })
     }
 
     func addLocalServer(name: String, executablePath: String, arguments: [String]) throws {
@@ -354,10 +416,10 @@ final class MCPConnectionCoordinator {
                 $0.toolCount = 0
                 $0.errorMessage = nil
             }
-            let client = client
+            guard let client else { return }
             Task { [weak self, client] in
                 await client.disconnect(serverID: serverID)
-                guard let self else { return }
+                guard let self, self.client === client else { return }
                 self.failedDisconnectIDs.insert(serverID)
                 self.updateSnapshot(serverID) {
                     $0.phase = .failed
@@ -495,18 +557,35 @@ private final class MCPLocalServerConfigurationStore {
     private static let shells: Set<String> = ["bash", "dash", "fish", "ksh", "sh", "zsh"]
     private let defaults: UserDefaults
     private(set) var services: [MCPServerDescriptor]
+    private(set) var loadError: String?
 
-    init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
-        if let data = defaults.data(forKey: Self.storageKey),
-           let descriptors = try? JSONDecoder().decode([MCPServerDescriptor].self, from: data) {
-            self.services = descriptors.filter(Self.isSupportedLocalDescriptor)
-        } else {
-            self.services = []
+    init(defaults: UserDefaults? = nil) {
+        let selectedDefaults = defaults ?? Self.selectedDefaults()
+        self.defaults = selectedDefaults
+        if LaunchArguments.seedsMalformedMCPConfiguration,
+           selectedDefaults.data(forKey: Self.storageKey) == nil {
+            selectedDefaults.set(Data("{".utf8), forKey: Self.storageKey)
+        }
+        guard let data = selectedDefaults.data(forKey: Self.storageKey) else {
+            services = []
+            return
+        }
+        do {
+            let descriptors = try JSONDecoder().decode([MCPServerDescriptor].self, from: data)
+            guard descriptors.allSatisfy(Self.isSupportedLocalDescriptor) else {
+                throw MCPConfigurationError.unsupportedSavedConfiguration
+            }
+            services = descriptors
+        } catch {
+            // Preserve the original bytes for explicit user recovery. Treating
+            // a decode failure as an empty catalog would let Add overwrite it.
+            services = []
+            loadError = "Saved local server configurations could not be read. They were left unchanged. Reset saved servers to add new ones."
         }
     }
 
     func add(name: String, executablePath: String, arguments: [String]) throws -> MCPServerDescriptor {
+        guard loadError == nil else { throw MCPConfigurationError.savedConfigurationUnavailable }
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmedName.isEmpty == false else { throw MCPConfigurationError.missingName }
         guard executablePath.hasPrefix("/") else { throw MCPConfigurationError.executableMustBeAbsolute }
@@ -532,17 +611,29 @@ private final class MCPLocalServerConfigurationStore {
             allowsSTDIOTransport: true,
             isUnauthenticatedUnsafe: true
         )
-        services.append(descriptor)
-        try persist()
-        return descriptor
-    }
-
-    private func persist() throws {
         do {
-            defaults.set(try JSONEncoder().encode(services), forKey: Self.storageKey)
+            let updatedServices = services + [descriptor]
+            defaults.set(try JSONEncoder().encode(updatedServices), forKey: Self.storageKey)
+            services = updatedServices
         } catch {
             throw MCPConfigurationError.persistenceFailed
         }
+        return descriptor
+    }
+
+    func resetSavedConfigurations() {
+        defaults.removeObject(forKey: Self.storageKey)
+        services = []
+        loadError = nil
+    }
+
+    private static func selectedDefaults() -> UserDefaults {
+        guard let testID = LaunchArguments.mcpConfigurationTestStoreID else { return .standard }
+        let suiteName = "com.manifoldkit.manifold.mcp.ui-tests.\(testID.uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            preconditionFailure("Could not create the isolated MCP UI-test preferences suite.")
+        }
+        return defaults
     }
 
     private static func isSupportedLocalDescriptor(_ descriptor: MCPServerDescriptor) -> Bool {
@@ -567,6 +658,8 @@ private enum MCPConfigurationError: LocalizedError {
     case shellExecutable
     case invalidArgument
     case persistenceFailed
+    case unsupportedSavedConfiguration
+    case savedConfigurationUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -576,6 +669,8 @@ private enum MCPConfigurationError: LocalizedError {
         case .shellExecutable: "Shell executables are not allowed for MCP servers."
         case .invalidArgument: "Arguments cannot contain NUL bytes."
         case .persistenceFailed: "The local server configuration could not be saved."
+        case .unsupportedSavedConfiguration, .savedConfigurationUnavailable:
+            "Saved local server configurations are unavailable. Reset saved servers before adding a new one."
         }
     }
 }

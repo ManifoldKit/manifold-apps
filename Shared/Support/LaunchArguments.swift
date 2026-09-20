@@ -139,6 +139,25 @@ enum LaunchArguments {
         isUITesting && CommandLine.arguments.contains("--appintent-tool-turn")
     }
 
+    /// Selects a separate preferences suite for a Mac MCP UI test. A malformed
+    /// ID fails startup rather than allowing a test to write production data.
+    static var mcpConfigurationTestStoreID: UUID? {
+        guard isUITesting,
+              let raw = ProcessInfo.processInfo.environment["MANIFOLD_MCP_CONFIG_TEST_STORE_ID"] else {
+            return nil
+        }
+        guard let id = UUID(uuidString: raw) else {
+            preconditionFailure("MANIFOLD_MCP_CONFIG_TEST_STORE_ID must be a UUID.")
+        }
+        return id
+    }
+
+    /// Seeds unreadable saved data only in an isolated MCP UI-test suite.
+    static var seedsMalformedMCPConfiguration: Bool {
+        isUITesting && mcpConfigurationTestStoreID != nil
+            && CommandLine.arguments.contains("--mcp-invalid-configuration-fixture")
+    }
+
     /// Enables the bundled no-credential MCP stdio fixture only for macOS UI
     /// tests. Production descriptors never read this environment value.
     static var runsMCPConnectionFixture: Bool {

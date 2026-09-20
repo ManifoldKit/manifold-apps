@@ -22,10 +22,10 @@ Xcode 26.6 and the iOS 26.5 simulator.
 ### MCP connections
 
 The MCP feature lets a user add an explicitly consented local, no-credential
-stdio executable. It does not offer OAuth catalog services or remote HTTP
-configuration yet: both need an app-registered redirect callback before a user
-can complete sign-in safely. Connected MCP tools are not advertised to chat
-until the separate tool-execution integration ships.
+stdio executable. OAuth-configured services need an app-registered redirect
+callback before a user can complete sign-in; remote HTTP configuration is also
+outside this connection-only slice. Connected MCP tools are not advertised to
+chat until the separate tool-execution integration ships.
 
 The published `ManifoldMCP` 0.78.0 stdio client does not yet interoperate with
 the official newline-delimited MCP stream, and its failed-session lifecycle
