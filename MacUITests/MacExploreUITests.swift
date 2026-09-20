@@ -21,7 +21,7 @@ final class MacExploreUITests: XCTestCase {
         )
         captureScreenshot(name: "Mac-Explore-Component-Examples")
         let brand = app.radioButtons["Brand"]
-        XCTAssertTrue(tapExploreElement(brand), "Brand must be reachable through the native Explore scroll path")
+        XCTAssertTrue(clickExploreElement(brand), "Brand must be reachable through the native Explore scroll path")
         XCTAssertTrue(
             themeReadout(radius: 22).waitForExistence(timeout: 5),
             "Brand must render the live preview's 22pt bubble radius"
@@ -29,21 +29,21 @@ final class MacExploreUITests: XCTestCase {
         captureScreenshot(name: "Mac-Explore-Brand-Theme")
 
         let reset = app.descendants(matching: .any)["theming-reset-button"]
-        XCTAssertTrue(tapExploreElement(reset), "Reset must be reachable through the native Explore scroll path")
+        XCTAssertTrue(clickExploreElement(reset), "Reset must be reachable through the native Explore scroll path")
         XCTAssertTrue(
             themeReadout(radius: 20).waitForExistence(timeout: 5),
             "Reset must restore the Standard live preview's 20pt bubble radius"
         )
 
         let models = app.descendants(matching: .any)["explore-show-models"]
-        XCTAssertTrue(tapExploreElement(models), "Models must be reachable through the native Explore scroll path")
+        XCTAssertTrue(clickExploreElement(models), "Models must be reachable through the native Explore scroll path")
         XCTAssertTrue(app.descendants(matching: .any)["model-management-tab-picker"].waitForExistence(timeout: 5))
         captureScreenshot(name: "Mac-Explore-Model-Management")
         dismissSheet(app: app)
 
         XCTAssertTrue(tapFeatureSidebarRow("explore", app: app))
         let cloud = app.descendants(matching: .any)["explore-show-cloud"]
-        XCTAssertTrue(tapExploreElement(cloud), "Cloud providers must be reachable through the native Explore scroll path")
+        XCTAssertTrue(clickExploreElement(cloud), "Cloud providers must be reachable through the native Explore scroll path")
         XCTAssertTrue(
             app.descendants(matching: .any).matching(
                 NSPredicate(format: "label == 'Cloud APIs' OR value == 'Cloud APIs'")
@@ -54,13 +54,13 @@ final class MacExploreUITests: XCTestCase {
     }
 
     @MainActor
-    private func tapExploreElement(_ element: XCUIElement, maximumScrolls: Int = 12) -> Bool {
+    private func clickExploreElement(_ element: XCUIElement, maximumScrolls: Int = 12) -> Bool {
         let explore = app.descendants(matching: .any)["explore-root"]
         guard explore.waitForExistence(timeout: 5) else { return false }
 
         for attempt in 0..<maximumScrolls {
             if element.exists && element.isHittable {
-                element.tap()
+                element.click()
                 return true
             }
 
@@ -79,7 +79,7 @@ final class MacExploreUITests: XCTestCase {
             if targetFrame.minY >= viewport.minY && targetFrame.maxY <= viewport.maxY {
                 logExploreGeometry(phase: "target inside viewport \(attempt + 1)", explore: explore, target: element)
                 if waitForHittable(element, timeout: 1) {
-                    element.tap()
+                    element.click()
                     return true
                 }
                 break
@@ -96,7 +96,7 @@ final class MacExploreUITests: XCTestCase {
         }
 
         if element.exists && element.isHittable {
-            element.tap()
+            element.click()
             return true
         }
         logExploreGeometry(phase: "failure", explore: explore, target: element)

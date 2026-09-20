@@ -23,7 +23,7 @@ final class MacLocalModelUITests: XCTestCase {
             waitForHittable(button, timeout: 10),
             "The central chat model-management button should be reachable on Manifold Mac"
         )
-        button.tap()
+        button.click()
 
         // The sheet root is not consistently surfaced in macOS accessibility;
         // the tab picker is the real ModelManagementSheet content and is stable.
@@ -66,7 +66,7 @@ final class MacLocalModelUITests: XCTestCase {
             identifier: "chat-model-switcher-chip"
         )
         if let chip = firstHittable(in: chipQuery, timeout: 3) {
-            chip.tap()
+            chip.click()
             return
         }
 
@@ -77,22 +77,22 @@ final class MacLocalModelUITests: XCTestCase {
             NSPredicate(format: "label CONTAINS[c] 'More' OR value CONTAINS[c] 'More'")
         )
         guard let more = firstHittable(in: moreQuery, timeout: 10) else {
-            XCTFail("Manifold Mac ChatView model switcher is neither directly tappable nor reachable through the More toolbar overflow")
+            XCTFail("Manifold Mac ChatView model switcher is neither directly clickable nor reachable through the More toolbar overflow")
             return
         }
-        more.tap()
+        more.click()
 
         guard let overflowChip = firstHittable(in: chipQuery, timeout: 5) else {
             XCTFail("The More toolbar overflow should expose the identified model switcher chip")
             return
         }
-        overflowChip.tap()
+        overflowChip.click()
     }
 
     @MainActor
     private func loadAndAssertGeneration(row: XCUIElement, model: String, backend: String, prompt: String) {
-        XCTAssertTrue(waitForHittable(row, timeout: 10), "Fixture row should be tappable: \(model)")
-        row.tap()
+        XCTAssertTrue(waitForHittable(row, timeout: 10), "Fixture row should be clickable: \(model)")
+        row.click()
 
         // The macOS switcher is a popover that remains open after selection.
         app.typeKey(.escape, modifierFlags: [])
@@ -117,7 +117,7 @@ final class MacLocalModelUITests: XCTestCase {
             XCTFail("Message input should be available after loading \(model)")
             return
         }
-        input.tap()
+        input.click()
         input.typeText(prompt)
 
         let sendButton = app.buttons["Send message"]
@@ -125,7 +125,7 @@ final class MacLocalModelUITests: XCTestCase {
             waitForEnabled(sendButton, timeout: 15),
             "Send should be enabled after loading \(model)"
         )
-        sendButton.tap()
+        sendButton.click()
 
         XCTAssertTrue(waitForAssistantCount(toExceed: assistantCountBefore, timeout: 30), "A completed \(backend) turn should add an assistant bubble")
         guard let newestAssistant = assistantBubbles().last else {
