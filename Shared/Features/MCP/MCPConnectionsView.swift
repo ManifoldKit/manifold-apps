@@ -533,7 +533,7 @@ private enum MCPConnectionCatalog {
             )),
             authorization: .none,
             toolNamespace: "fixture",
-            initializationTimeout: .seconds(3),
+            initializationTimeout: LaunchArguments.mcpFixtureMode == "cancel-stall" ? .seconds(30) : .seconds(3),
             requestTimeout: .seconds(3),
             dataDisclosure: "Runs the app's bundled test-only local MCP fixture over stdio. It does not use credentials or contact the network.",
             toolFilter: .allowAll,
@@ -545,7 +545,7 @@ private enum MCPConnectionCatalog {
 
     private static func fixtureEnvironment() -> [String: String] {
         var environment = [
-            "MANIFOLD_MCP_FIXTURE_MODE": LaunchArguments.runsMCPConnectionFailureFixture ? "fail" : "official-newline"
+            "MANIFOLD_MCP_FIXTURE_MODE": LaunchArguments.mcpFixtureMode
         ]
         if let attemptLogURL = LaunchArguments.mcpFixtureAttemptLogURL {
             environment["MANIFOLD_MCP_FIXTURE_ATTEMPT_LOG"] = attemptLogURL.path

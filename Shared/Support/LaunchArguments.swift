@@ -170,6 +170,20 @@ enum LaunchArguments {
         runsMCPConnectionFixture && CommandLine.arguments.contains("--mcp-connection-fixture-failure")
     }
 
+    /// Additional protocol/lifecycle modes are available only to the bundled
+    /// Mac UI-test fixture. Unknown values fail startup rather than weakening
+    /// a regression test into the normal success path.
+    static var mcpFixtureMode: String {
+        guard runsMCPConnectionFixture else { return "official-newline" }
+        if runsMCPConnectionFailureFixture { return "fail" }
+        let mode = ProcessInfo.processInfo.environment["MANIFOLD_MCP_FIXTURE_MODE"] ?? "official-newline"
+        precondition(
+            ["official-newline", "stall-initialize", "cancel-stall"].contains(mode),
+            "Unsupported MANIFOLD_MCP_FIXTURE_MODE."
+        )
+        return mode
+    }
+
     static var mcpFixtureServerURL: URL? {
         guard runsMCPConnectionFixture,
               let path = ProcessInfo.processInfo.environment["MANIFOLD_MCP_FIXTURE_SERVER_PATH"],
