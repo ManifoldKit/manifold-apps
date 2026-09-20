@@ -34,6 +34,13 @@ make test                 # runs the complete iOS + macOS UI-test targets
 See `AGENTS.md` for the full set of repo-specific conventions and
 constraints.
 
+The shared UI suite exercises ChatView's message actions on both platforms.
+Regenerate replaces the final assistant reply while retaining its prompt;
+editing a user message replaces that prompt, removes every later message, and
+generates one replacement downstream reply. The fixture keeps an earlier
+completed exchange so the assertions also prove that unrelated history stays
+intact.
+
 ## Manifold Studio direction
 
 The planned **Manifold Studio** is a separate SwiftPM server daemon and browser

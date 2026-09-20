@@ -139,6 +139,19 @@ enum LaunchArguments {
         isUITesting && CommandLine.arguments.contains("--appintent-tool-turn")
     }
 
+    /// Selects the deterministic fixture used to exercise the released
+    /// ChatView regenerate action. It is kept behind `--uitesting` so product
+    /// launches never receive test responses.
+    static var runsTurnLoopRegenerationTest: Bool {
+        isUITesting && CommandLine.arguments.contains("--turn-loop-regeneration-test")
+    }
+
+    /// Selects the deterministic fixture used to exercise user-message edits
+    /// that remove more than one downstream message.
+    static var runsTurnLoopEditTest: Bool {
+        isUITesting && CommandLine.arguments.contains("--turn-loop-edit-test")
+    }
+
     /// The value following `--scenario <id>`, if present. Reserved for the
     /// future `ScenariosFeature` (mirrors core's `--bck-demo-scenario`);
     /// unused until that feature is ported.

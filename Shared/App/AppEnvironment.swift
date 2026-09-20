@@ -388,6 +388,31 @@ final class AppEnvironment {
                 .tokens(["Reminder", " completed", " through", " the", " live", " registry", "."]),
             ]
         }
+        if LaunchArguments.runsTurnLoopRegenerationTest {
+            // The first user message also triggers title classification, which
+            // shares this ScriptedBackend when UI testing. Those two generate
+            // calls race for the cursor, so the first two entries must be
+            // interchangeable. The second send and regenerate are then
+            // deterministic.
+            return [
+                .tokens(["Earlier", " answer", " stays."]),
+                .tokens(["Earlier", " answer", " stays."]),
+                .tokens(["Original", " target", " answer."]),
+                .tokens(["Replacement", " target", " answer."]),
+            ]
+        }
+        if LaunchArguments.runsTurnLoopEditTest {
+            // This variant inserts a later completed turn before editing the
+            // middle user message. The fifth entry is therefore reached only
+            // when the edit correctly starts a replacement downstream turn.
+            return [
+                .tokens(["Earlier", " answer", " stays."]),
+                .tokens(["Earlier", " answer", " stays."]),
+                .tokens(["Original", " target", " answer."]),
+                .tokens(["Later", " answer", " to", " discard."]),
+                .tokens(["Replacement", " target", " answer."]),
+            ]
+        }
         return [
             .tokens(["Hello", " from", " the", " scripted", " UI-test", " backend", "."]),
             .tokens(["Sure", ",", " happy", " to", " help", "."]),
