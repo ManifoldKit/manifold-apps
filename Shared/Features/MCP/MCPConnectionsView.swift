@@ -44,7 +44,7 @@ struct MCPConnectionsView: View {
                             serviceRow(for: descriptor)
                         }
                     } footer: {
-                        Text("Local stdio servers are run only after disclosure consent. OAuth and remote HTTP configuration need a product redirect callback and are not offered here yet.")
+                        Text("Local servers run on your Mac after you review and approve their access.")
                     }
                 }
             }
