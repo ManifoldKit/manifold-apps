@@ -122,6 +122,7 @@ final class MacMCPConnectionUITests: XCTestCase {
         field.typeText(replacement)
     }
 
+    @MainActor
     private func launchConfigurationApp(seedMalformed: Bool) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--uitesting", "-ApplePersistenceIgnoreState", "YES"]
@@ -131,6 +132,7 @@ final class MacMCPConnectionUITests: XCTestCase {
         return app
     }
 
+    @MainActor
     private func launchFixtureApp(failing: Bool, attemptLogURL: URL) throws -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--uitesting", "--mcp-connection-fixture", "-ApplePersistenceIgnoreState", "YES"]
@@ -146,6 +148,7 @@ final class MacMCPConnectionUITests: XCTestCase {
         return app
     }
 
+    @MainActor
     private func activate(_ app: XCUIApplication) {
         app.launch()
         if !app.windows.firstMatch.waitForExistence(timeout: 2) {

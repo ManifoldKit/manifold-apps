@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""An official newline-JSON MCP stdio fixture for Manifold Mac UI tests."""
+"""A newline-delimited JSON MCP stdio fixture."""
 
 import json
 import os
