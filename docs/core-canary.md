@@ -45,8 +45,8 @@ requested application and ManifoldKit into separate paths. This lets the
 always-running terminal-evidence step record a failure even when an invalid
 ref prevents either requested checkout. Evidence storage is initialized before
 Xcode selection and XcodeGen installation, so provisioning failures are also
-recorded. The runner checks resolved commits, rejects dirty checkouts and
-pre-existing package/spec paths, and refuses to replace an existing source
+recorded. The runner checks resolved commits, fails if checkout status cannot
+be inspected or is dirty, and refuses to replace an existing package or spec
 path. The
 canary script makes a temporary `ManifoldKit -> core` symlink and renders a
 temporary XcodeGen spec whose package declaration is exactly:
@@ -90,7 +90,7 @@ bash scripts/run-core-canary.sh \
   --core-path /path/to/ManifoldKit \
   --core-ref "$(git -C /path/to/ManifoldKit rev-parse HEAD)" \
   --metadata-dir /private/tmp/manifold-core-canary \
-  --ios-destination 'platform=iOS Simulator,name=iPhone 16'
+  --ios-destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5'
 ```
 
 Run `bash scripts/test-core-canary.sh` for offline guard coverage. It proves a

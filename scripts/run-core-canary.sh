@@ -53,9 +53,11 @@ validate_full_sha() {
 require_clean_checkout() {
     local name="$1"
     local path="$2"
+    local status_output
 
-    [[ -z "$(git -C "$path" status --porcelain --untracked-files=normal)" ]] \
-        || fail "$name checkout is dirty: $path"
+    status_output="$(git -C "$path" status --porcelain --untracked-files=normal)" \
+        || fail "could not inspect $name checkout status: $path"
+    [[ -z "$status_output" ]] || fail "$name checkout is dirty: $path"
 }
 
 APP_ROOT="$PWD"
@@ -65,7 +67,7 @@ CORE_PATH=""
 CORE_REF=""
 CORE_EXPECTED_SHA=""
 METADATA_DIR=""
-IOS_DESTINATION="platform=iOS Simulator,name=iPhone 16"
+IOS_DESTINATION="platform=iOS Simulator,name=iPhone 17,OS=26.5"
 RENDERER=""
 
 while [[ "$#" -gt 0 ]]; do

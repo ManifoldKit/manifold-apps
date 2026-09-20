@@ -83,8 +83,18 @@ jobs:
           set -euo pipefail
           app_sha="$(git -C "$GITHUB_WORKSPACE/app" rev-parse --verify 'HEAD^{commit}')"
           core_sha="$(git -C "$GITHUB_WORKSPACE/core" rev-parse --verify 'HEAD^{commit}')"
-          [[ -z "$(git -C "$GITHUB_WORKSPACE/app" status --porcelain --untracked-files=normal)" ]]
-          [[ -z "$(git -C "$GITHUB_WORKSPACE/core" status --porcelain --untracked-files=normal)" ]]
+          app_status="$(git -C "$GITHUB_WORKSPACE/app" status --porcelain --untracked-files=normal)" || {
+            echo 'Failed to inspect application checkout status.' >&2
+            exit 1
+          }
+          core_status="$(git -C "$GITHUB_WORKSPACE/core" status --porcelain --untracked-files=normal)" || {
+            echo 'Failed to inspect core checkout status.' >&2
+            exit 1
+          }
+          [[ -z "$app_status" && -z "$core_status" ]] || {
+            echo 'Requested checkout is dirty.' >&2
+            exit 1
+          }
           printf 'APP_SHA=%s\nCORE_SHA=%s\n' "$app_sha" "$core_sha" >> "$GITHUB_ENV"
 
       - name: Run app/core compatibility gate

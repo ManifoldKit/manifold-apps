@@ -104,12 +104,30 @@ EOF
     chmod +x "$path/xcodegen" "$path/xcodebuild"
 }
 
+make_fake_git() {
+    local path="$1"
+    mkdir -p "$path"
+    cat > "$path/git" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == '-C' && "${2:-}" == "$CANARY_TEST_STATUS_FAIL_PATH" && "${3:-}" == 'status' ]]; then
+    echo 'simulated git status failure' >&2
+    printf 'injected\n' > "$CANARY_TEST_STATUS_MARKER"
+    exit 73
+fi
+exec "$CANARY_REAL_GIT" "$@"
+EOF
+    chmod +x "$path/git"
+}
+
 APP="$TEMP_ROOT/app"
 CORE="$TEMP_ROOT/core"
 TOOLS="$TEMP_ROOT/tools"
+FAKE_GIT="$TEMP_ROOT/fakegit"
 make_checkout "$APP"
 make_core_checkout "$CORE"
 make_fake_tools "$TOOLS"
+make_fake_git "$FAKE_GIT"
 SOURCE_COPY="$TEMP_ROOT/project-before.yml"
 cp "$APP/project.yml" "$SOURCE_COPY"
 
@@ -153,6 +171,27 @@ assert_failed 'leading-dash ref' bash "$RUNNER" --app-root="$APP" --core-path="$
 MISSING="$TEMP_ROOT/metadata-missing"
 assert_failed 'missing core checkout' bash "$RUNNER" --app-root "$APP" --core-path "$TEMP_ROOT/missing" --core-ref main --metadata-dir "$MISSING"
 [[ "$(read_status "$MISSING/canary-metadata.json")" == 'failed' ]] || fail 'missing input did not record failure'
+
+for checkout in app core; do
+    if [[ "$checkout" == app ]]; then
+        fail_path="$(cd "$APP" && pwd -P)"
+    else
+        fail_path="$(cd "$CORE" && pwd -P)"
+    fi
+    STATUS_FAILURE="$TEMP_ROOT/metadata-status-failure-$checkout"
+    STATUS_LOG="$TEMP_ROOT/status-failure-$checkout.log"
+    STATUS_MARKER="$TEMP_ROOT/status-injected-$checkout"
+    assert_failed "$checkout git status failure" env PATH="$FAKE_GIT:$PATH" \
+        CANARY_REAL_GIT="$(command -v git)" CANARY_TEST_STATUS_FAIL_PATH="$fail_path" \
+        CANARY_TEST_STATUS_MARKER="$STATUS_MARKER" \
+        CANARY_XCODEGEN="$TOOLS/xcodegen" CANARY_XCODEBUILD="$TOOLS/xcodebuild" \
+        CANARY_TEST_LOG="$STATUS_LOG" bash "$RUNNER" --app-root "$APP" \
+        --core-path "$CORE" --core-ref main --metadata-dir "$STATUS_FAILURE"
+    [[ -f "$STATUS_MARKER" ]] || fail "$checkout git status fault was not injected"
+    [[ "$(read_status "$STATUS_FAILURE/canary-metadata.json")" == 'failed' ]] \
+        || fail "$checkout git status failure did not record failed metadata"
+    [[ ! -e "$STATUS_LOG" ]] || fail "$checkout git status failure reached Xcode tools"
+done
 
 DIRTY_FILE="$APP/untracked-canary-input"
 printf 'dirty\n' > "$DIRTY_FILE"

@@ -4,9 +4,12 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
 from pathlib import Path
 
 
@@ -14,6 +17,63 @@ ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW = (ROOT / ".github/workflows/core-canary.yml").read_text()
 VALIDATOR = ROOT / "scripts/validate-core-canary-event.py"
 EARLY_WRITER = ROOT / "scripts/write-core-canary-early-metadata.py"
+
+
+def workflow_run_script(step_name: str) -> str:
+    lines = WORKFLOW.splitlines()
+    step = lines.index(f"      - name: {step_name}")
+    run = next(index for index in range(step + 1, len(lines)) if lines[index] == "        run: |")
+    body = []
+    for line in lines[run + 1:]:
+        if line and not line.startswith("          "):
+            break
+        body.append(line)
+    return textwrap.dedent("\n".join(body)) + "\n"
+
+
+def assert_status_command_failure(temp: Path) -> None:
+    git_path = shutil.which("git")
+    assert git_path is not None
+    fakebin = temp / "fakebin"
+    fakebin.mkdir()
+    fake_git = fakebin / "git"
+    fake_git.write_text("""#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == '-C' && "${3:-}" == 'status' ]]; then
+    if [[ "${2:-}" == "$CANARY_TEST_STATUS_FAIL_PATH" ]]; then
+        echo 'simulated git status failure' >&2
+        exit 73
+    fi
+    exit 0
+fi
+exec "$CANARY_REAL_GIT" "$@"
+""")
+    fake_git.chmod(0o755)
+    (temp / "app").symlink_to(ROOT, target_is_directory=True)
+    (temp / "core").symlink_to(ROOT, target_is_directory=True)
+    script = workflow_run_script("Resolve checked-out identities")
+    for checkout in ("app", "core"):
+        environment_path = temp / f"github-env-{checkout}"
+        environment_path.write_text("BEFORE=untouched\n")
+        environment = os.environ | {
+            "PATH": f"{fakebin}:{os.environ['PATH']}",
+            "CANARY_REAL_GIT": git_path,
+            "CANARY_TEST_STATUS_FAIL_PATH": str(temp / checkout),
+            "GITHUB_WORKSPACE": str(temp),
+            "GITHUB_ENV": str(environment_path),
+        }
+        result = subprocess.run(
+            ["bash", "-e", "-o", "pipefail", "-c", script],
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode != 0, f"{checkout} status failure passed identity step"
+        assert "simulated git status failure" in result.stderr
+        assert environment_path.read_text() == "BEFORE=untouched\n", (
+            f"{checkout} status failure exported checked-out identities"
+        )
 
 
 def assert_workflow_boundary() -> None:
@@ -68,6 +128,7 @@ def main() -> None:
     assert_workflow_boundary()
     with tempfile.TemporaryDirectory(prefix="manifold-canary-workflow-") as directory:
         temp = Path(directory)
+        assert_status_command_failure(temp)
         for name, key in (("repository_dispatch", "client_payload"),
                           ("workflow_dispatch", "inputs")):
             valid = {"app_ref": "main", "core_ref": "abcdef1234567"}
