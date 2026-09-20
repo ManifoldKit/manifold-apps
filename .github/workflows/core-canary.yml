@@ -1,0 +1,140 @@
+name: Core compatibility canary
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_ref:
+        description: Application Git ref to test
+        required: true
+        default: main
+        type: string
+      core_ref:
+        description: ManifoldKit Git ref to test
+        required: true
+        default: main
+        type: string
+  repository_dispatch:
+    types: [manifoldkit-apps-canary]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: core-canary-${{ github.event_name }}-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  canary:
+    name: app against requested core
+    runs-on: macos-26
+    timeout-minutes: 90
+    env:
+      IOS_DESTINATION: platform=iOS Simulator,name=iPhone 17,OS=26.5
+    steps:
+      - name: Check out canary implementation
+        uses: actions/checkout@v4
+        with:
+          path: canary-tools
+          fetch-depth: 1
+
+      - name: Initialize evidence directory
+        run: |
+          set -euo pipefail
+          metadata_dir="$RUNNER_TEMP/manifold-core-canary"
+          mkdir -p "$metadata_dir"
+          printf 'METADATA_DIR=%s\n' "$metadata_dir" >> "$GITHUB_ENV"
+
+      - name: Validate event inputs
+        run: |
+          set -euo pipefail
+          python3 "$GITHUB_WORKSPACE/canary-tools/scripts/validate-core-canary-event.py" \
+            --event-name="$GITHUB_EVENT_NAME" \
+            --event-path="$GITHUB_EVENT_PATH" \
+            --github-env="$GITHUB_ENV"
+
+      - name: Set up Xcode 26.6
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90
+        with:
+          xcode-version: '26.6'
+
+      - name: Install XcodeGen
+        run: |
+          set -euo pipefail
+          brew install xcodegen
+          xcodegen --version
+
+      - name: Check out requested application revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.APP_REF }}
+          path: app
+          fetch-depth: 1
+
+      - name: Check out requested ManifoldKit revision
+        uses: actions/checkout@v4
+        with:
+          repository: ManifoldKit/ManifoldKit
+          ref: ${{ env.CORE_REF }}
+          path: core
+          fetch-depth: 1
+
+      - name: Resolve checked-out identities
+        run: |
+          set -euo pipefail
+          app_sha="$(git -C "$GITHUB_WORKSPACE/app" rev-parse --verify 'HEAD^{commit}')"
+          core_sha="$(git -C "$GITHUB_WORKSPACE/core" rev-parse --verify 'HEAD^{commit}')"
+          [[ -z "$(git -C "$GITHUB_WORKSPACE/app" status --porcelain --untracked-files=normal)" ]]
+          [[ -z "$(git -C "$GITHUB_WORKSPACE/core" status --porcelain --untracked-files=normal)" ]]
+          printf 'APP_SHA=%s\nCORE_SHA=%s\n' "$app_sha" "$core_sha" >> "$GITHUB_ENV"
+
+      - name: Run app/core compatibility gate
+        run: |
+          bash "$GITHUB_WORKSPACE/canary-tools/scripts/run-core-canary.sh" \
+            --app-root="$GITHUB_WORKSPACE/app" \
+            --app-ref="$APP_REF" \
+            --app-sha="$APP_SHA" \
+            --core-path="$GITHUB_WORKSPACE/core" \
+            --core-ref="$CORE_REF" \
+            --core-sha="$CORE_SHA" \
+            --metadata-dir="$METADATA_DIR" \
+            --ios-destination="$IOS_DESTINATION" \
+            --renderer="$GITHUB_WORKSPACE/canary-tools/scripts/prepare-core-canary-spec.py"
+
+      - name: Record early terminal failure
+        if: always()
+        env:
+          RUNNER_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          metadata_dir="${METADATA_DIR:-$RUNNER_TEMP/manifold-core-canary}"
+          mkdir -p "$metadata_dir"
+          if [[ -f "$metadata_dir/canary-metadata.json" ]]; then
+            exit 0
+          fi
+          python3 "$GITHUB_WORKSPACE/canary-tools/scripts/write-core-canary-early-metadata.py" \
+            --output "$metadata_dir/canary-metadata.json" \
+            --app-ref="${APP_REF:-}" \
+            --core-ref="${CORE_REF:-}" \
+            --app-path "$GITHUB_WORKSPACE/app" \
+            --core-path "$GITHUB_WORKSPACE/core" \
+            --reason "workflow stopped before the canary runner (${RUNNER_STATUS})"
+
+      - name: Publish canary summary
+        if: always()
+        run: |
+          set -euo pipefail
+          metadata_dir="${METADATA_DIR:-$RUNNER_TEMP/manifold-core-canary}"
+          if [[ -f "$metadata_dir/canary-metadata.json" ]]; then
+            cat "$metadata_dir/canary-metadata.json" >> "$GITHUB_STEP_SUMMARY"
+          else
+            printf '%s\n' 'Canary stopped before metadata could be written.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload canary evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: manifold-apps-core-canary-${{ github.run_id }}
+          path: ${{ runner.temp }}/manifold-core-canary
+          if-no-files-found: warn
+          retention-days: 14
