@@ -92,7 +92,7 @@ final class MacRealModelUITests: XCTestCase {
             row.waitForExistence(timeout: 15) && row.isHittable,
             "The discovered installed model should be selectable: \(model)"
         )
-        row.tap()
+        row.click()
 
         // The macOS switcher is a popover that stays open after selection.
         app.typeKey(.escape, modifierFlags: [])
@@ -108,7 +108,7 @@ final class MacRealModelUITests: XCTestCase {
             XCTFail("Message input should be available after loading \(model)")
             return
         }
-        input.tap()
+        input.click()
         input.typeText(prompt)
 
         let sendButton = app.buttons["Send message"]
@@ -116,7 +116,7 @@ final class MacRealModelUITests: XCTestCase {
             sendButton.waitForExistence(timeout: 5) && sendButton.isEnabled,
             "Send should be enabled after typing a prompt for \(model)"
         )
-        sendButton.tap()
+        sendButton.click()
 
         XCTAssertTrue(
             waitForGenerationToStartAndFinishWithoutApproval(timeout: 180),
@@ -149,7 +149,7 @@ final class MacRealModelUITests: XCTestCase {
             chip.waitForExistence(timeout: 180) && chip.isHittable,
             "Manifold Mac ChatView should expose its host-owned model switcher after real model discovery"
         )
-        chip.tap()
+        chip.click()
     }
 
     @MainActor
