@@ -239,7 +239,13 @@ final class TurnLoopActionUITests: XCTestCase {
     private func openMessageContextMenu(_ element: XCUIElement) -> Bool {
         guard element.waitForExistence(timeout: 5), element.isHittable else { return false }
         #if os(macOS)
-        element.rightClick()
+        // The centre of selectable message text opens AppKit's text-editing
+        // menu (Ask Siri, Font, Spelling), hiding the message action menu.
+        // Secondary-click the bubble's padded background, as a user can.
+        let horizontalPosition: CGFloat = element.label.hasPrefix("User said:") ? 0.08 : 0.92
+        element.coordinate(
+            withNormalizedOffset: CGVector(dx: horizontalPosition, dy: 0.88)
+        ).rightClick()
         #else
         element.press(forDuration: 1.2)
         #endif
