@@ -7,6 +7,24 @@ import XCTest
 /// core's full helper library.
 extension XCTestCase {
 
+    /// Use the platform's native primary pointer action. XCTest on macOS 27
+    /// can synthesize tap() without dispatching an AppKit button action.
+    func clickOrTap(_ element: XCUIElement) {
+        #if os(macOS)
+        element.click()
+        #else
+        element.tap()
+        #endif
+    }
+
+    func clickOrTapCoordinate(_ coordinate: XCUICoordinate) {
+        #if os(macOS)
+        coordinate.click()
+        #else
+        coordinate.tap()
+        #endif
+    }
+
     // MARK: - App Launch
 
     /// Launches the app in deterministic UI-testing mode.
@@ -42,7 +60,7 @@ extension XCTestCase {
         // and makes subsequent control interactions deterministic.
         app.windows.firstMatch
             .coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.05))
-            .tap()
+            .click()
         XCTAssertTrue(
             app.wait(for: .runningForeground, timeout: 5),
             "App should reach the foreground after focusing its window",
@@ -67,10 +85,10 @@ extension XCTestCase {
         ]
         for sidebarButton in sidebarButtons where sidebarButton.waitForExistence(timeout: 2) {
             if sidebarButton.isHittable {
-                sidebarButton.tap()
+                clickOrTap(sidebarButton)
                 if waitForSidebar(app: app) { return }
             }
-            sidebarButton.coordinate(withNormalizedOffset: CGVector(dx: 1.0, dy: 0.5)).tap()
+            clickOrTapCoordinate(sidebarButton.coordinate(withNormalizedOffset: CGVector(dx: 1.0, dy: 0.5)))
             if waitForSidebar(app: app) { return }
         }
 
@@ -127,9 +145,9 @@ extension XCTestCase {
 
         print("FEATURE_NAVIGATION id=\(featureID) row=\(row.frame) viewport=\(featureList.frame) hittable=\(row.isHittable)")
         if row.isHittable {
-            row.tap()
+            clickOrTap(row)
         } else {
-            row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            clickOrTapCoordinate(row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)))
         }
         return true
     }
@@ -145,7 +163,7 @@ extension XCTestCase {
 
         if app.staticTexts["Chats"].exists || app.buttons["new-chat-button"].exists {
             let outsideSidebar = app.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.2))
-            outsideSidebar.tap()
+            clickOrTapCoordinate(outsideSidebar)
             if isChatDetailVisible(app: app) { return }
             app.swipeLeft()
             if isChatDetailVisible(app: app) { return }
@@ -153,13 +171,13 @@ extension XCTestCase {
 
         let firstSessionCell = firstSessionRow(app: app)
         if firstSessionCell.waitForExistence(timeout: 3), firstSessionCell.isHittable {
-            firstSessionCell.tap()
+            clickOrTap(firstSessionCell)
         } else {
             let sessionText = app.staticTexts.matching(NSPredicate(
                 format: "label == 'New Chat' OR label CONTAINS[c] 'updated'"
             )).firstMatch
             if sessionText.waitForExistence(timeout: 2), sessionText.isHittable {
-                sessionText.tap()
+                clickOrTap(sessionText)
             }
         }
 
@@ -236,7 +254,7 @@ extension XCTestCase {
         #if os(iOS)
         input.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.20)).tap()
         #else
-        input.tap()
+        input.click()
         #endif
     }
 
@@ -298,7 +316,7 @@ extension XCTestCase {
     func dismissSheet(app: XCUIApplication) {
         let doneButton = app.buttons["Done"]
         if doneButton.waitForExistence(timeout: 2), doneButton.isHittable {
-            doneButton.tap()
+            clickOrTap(doneButton)
         } else {
             let topCoordinate = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
             let bottomCoordinate = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9))
