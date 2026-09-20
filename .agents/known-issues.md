@@ -119,7 +119,7 @@ app launches, leaving its controls disabled and non-hittable. Calling
 for about a minute and throw while the app stays `Running Background`. A prior
 test can also persist an intentional all-windows-closed state, leaving only the
 app menu bar after relaunch. Launch with `-ApplePersistenceIgnoreState YES`,
-send Command-N when no app window appears, then tap an inert point in the tested
+send Command-N when no app window appears, then click an inert point in the tested
 window's title region and assert foreground state before interacting with
 controls. In the macOS Manifold app, normalized x=0.3 is the title; x=0.5 hits the
 model-switcher chip and opens its popover, so a generic title-center click
@@ -181,7 +181,7 @@ macOS 15.7.9. Diagnostic geometry showed one fast swipe moved it from below
 the scroll viewport to above it; subsequent downward scrolling never recovered.
 A shorter local macOS 26 window reproduced the same failure, while ordinary
 user scrolling and Brand/reset worked. Use bounded incremental scroll events,
-recompute direction from the target and viewport frames each time, and tap only
+recompute direction from the target and viewport frames each time, and click only
 when the native control is hittable. For XCUIElement's Mac scroll event, negative
 deltaY reveals lower content and positive reveals higher content. A full short-
 window target proved the original failure and the corrected direction; do not
@@ -201,3 +201,17 @@ with OS 26, keep the published `minorVersion` range starting at MLX 0.6.2, and
 run Mac UI tests on a macOS 26-or-newer runner. Both complete app builds passed
 on Xcode 27 after that alignment. The macOS 26 hosted image uses Xcode 26.6
 and an installed iPhone 17/iOS 26.5 simulator for the CI configuration.
+
+## macOS XCTest tap can synthesize input without invoking an AppKit control
+
+On 2026-09-21 with Xcode 27/macOS 27, three complete Manifold Mac UI cases
+failed after tap events, including two where Manifold was foreground and its
+identified buttons existed. A separate native AppKit button-counter probe
+confirmed the input mismatch: `XCUIElement.tap()` synthesized an event but
+left the counter at zero, while `click()` and Return on the default button
+each incremented it. All three probe cases had passed window, foreground,
+button, and initial-count assertions; the corrected complete probe target
+reported two passes and the expected tap failure. Use `click()` for macOS
+XCUIElement and XCUICoordinate primary actions, preserving `tap()` for iOS
+through the shared `clickOrTap` helper. Keep the complete app UI targets as
+the gate: the probe diagnoses input delivery, not every app route.
