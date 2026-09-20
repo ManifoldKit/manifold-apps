@@ -68,6 +68,7 @@ struct MCPConnectionsView: View {
     private var lifecycleContent: some View {
         connectionContent
         .navigationTitle("MCP")
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("mcp-connections-root")
         .onAppear {
             isVisible = true
