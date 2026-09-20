@@ -19,53 +19,7 @@ struct MCPConnectionsView: View {
     @State private var configurationError: String?
 
     var body: some View {
-        Group {
-            if let error = coordinator.configurationLoadError {
-                ContentUnavailableView {
-                    Label("Saved servers unavailable", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(error)
-                } actions: {
-                    Button("Reset Saved Servers") {
-                        isConfirmingConfigurationReset = true
-                    }
-                    .accessibilityIdentifier("mcp-reset-saved-servers")
-                }
-            } else if coordinator.catalog.isEmpty {
-                ContentUnavailableView {
-                    Label("No local servers configured", systemImage: "server.rack")
-                } description: {
-                    Text("Add a trusted local MCP server executable to connect it over stdio.")
-                }
-            } else {
-                List {
-                    Section("Connected Services") {
-                        ForEach(coordinator.catalog, id: \.id) { descriptor in
-                            serviceRow(for: descriptor)
-                        }
-                    } footer: {
-                        Text("Local servers run on your Mac after you review and approve their access.")
-                    }
-                }
-            }
-        }
-        .navigationTitle("MCP")
-        .accessibilityIdentifier("mcp-connections-root")
-        .onAppear {
-            isVisible = true
-            coordinator.startListeningIfNeeded()
-        }
-        .onDisappear {
-            isVisible = false
-            coordinator.shutdown()
-        }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .background {
-                coordinator.shutdown()
-            } else if phase == .active && isVisible {
-                coordinator.startListeningIfNeeded()
-            }
-        }
+        lifecycleContent
         .toolbar {
             Button("Add Local Server", systemImage: "plus") {
                 isAddingService = true
@@ -108,6 +62,63 @@ struct MCPConnectionsView: View {
         }
         .sheet(isPresented: $isAddingService) {
             localServerConfiguration
+        }
+    }
+
+    private var lifecycleContent: some View {
+        connectionContent
+        .navigationTitle("MCP")
+        .accessibilityIdentifier("mcp-connections-root")
+        .onAppear {
+            isVisible = true
+            coordinator.startListeningIfNeeded()
+        }
+        .onDisappear {
+            isVisible = false
+            coordinator.shutdown()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background {
+                coordinator.shutdown()
+            } else if phase == .active && isVisible {
+                coordinator.startListeningIfNeeded()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var connectionContent: some View {
+        Group {
+            if let error = coordinator.configurationLoadError {
+                ContentUnavailableView {
+                    Label("Saved servers unavailable", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(error)
+                } actions: {
+                    Button("Reset Saved Servers") {
+                        isConfirmingConfigurationReset = true
+                    }
+                    .accessibilityIdentifier("mcp-reset-saved-servers")
+                }
+            } else if coordinator.catalog.isEmpty {
+                ContentUnavailableView {
+                    Label("No local servers configured", systemImage: "server.rack")
+                } description: {
+                    Text("Add a trusted local MCP server executable to connect it over stdio.")
+                }
+            } else {
+                List {
+                    Section {
+                        ForEach(coordinator.catalog, id: \.id) { descriptor in
+                            serviceRow(for: descriptor)
+                        }
+                    } header: {
+                        Text("Connected Services")
+                    } footer: {
+                        Text("Local servers run on your Mac after you review and approve their access.")
+                    }
+                }
+            }
         }
     }
 
@@ -447,7 +458,7 @@ final class MCPConnectionCoordinator {
 
     private static func message(for error: Error) -> String {
         guard let error = error as? MCPError else { return error.localizedDescription }
-        switch error {
+        return switch error {
         case .requestTimeout:
             "Connection timed out. Confirm the local server is available, then retry."
         case .transportClosed:
