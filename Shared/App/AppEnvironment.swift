@@ -130,6 +130,12 @@ final class AppEnvironment {
             if LaunchArguments.runsToolApprovalFlow {
                 backend = ToolApprovalTestBackend(root: ManifoldToolRoot.resolve())
                 backendName = BackendName.ollama.rawValue
+            } else if LaunchArguments.runsTurnLoopRegenerationTest {
+                backend = TurnLoopActionTestBackend(flow: .regenerate)
+                backendName = "TurnLoopUITest"
+            } else if LaunchArguments.runsTurnLoopEditTest {
+                backend = TurnLoopActionTestBackend(flow: .edit)
+                backendName = "TurnLoopUITest"
             } else {
                 backend = ScriptedBackend(turns: uiTestTurns)
                 backendName = LaunchArguments.showsCloudToolCatalog
@@ -373,11 +379,9 @@ final class AppEnvironment {
         }
     }
 
-    /// Deterministic scripted turns for `--uitesting` runs — enough for the
-    /// smoke suite's single send/receive round trip. `ScriptedBackend`
-    /// returns an empty terminal turn once these are exhausted, which the
-    /// turn loop treats as "no more tool calls, stop" rather than an error,
-    /// so running out mid-session is harmless.
+    /// Default deterministic turns for ordinary `--uitesting` runs. The
+    /// edit/regenerate flows use a separate backend that validates the actual
+    /// prompt and history before returning their distinct responses.
     private static var uiTestTurns: [ScriptedBackend.Turn] {
         if LaunchArguments.runsAppIntentToolTurn {
             return [
@@ -386,31 +390,6 @@ final class AppEnvironment {
                     arguments: #"{"text":"review the live registry"}"#
                 ),
                 .tokens(["Reminder", " completed", " through", " the", " live", " registry", "."]),
-            ]
-        }
-        if LaunchArguments.runsTurnLoopRegenerationTest {
-            // The first user message also triggers title classification, which
-            // shares this ScriptedBackend when UI testing. Those two generate
-            // calls race for the cursor, so the first two entries must be
-            // interchangeable. The second send and regenerate are then
-            // deterministic.
-            return [
-                .tokens(["Earlier", " answer", " stays."]),
-                .tokens(["Earlier", " answer", " stays."]),
-                .tokens(["Original", " target", " answer."]),
-                .tokens(["Replacement", " target", " answer."]),
-            ]
-        }
-        if LaunchArguments.runsTurnLoopEditTest {
-            // This variant inserts a later completed turn before editing the
-            // middle user message. The fifth entry is therefore reached only
-            // when the edit correctly starts a replacement downstream turn.
-            return [
-                .tokens(["Earlier", " answer", " stays."]),
-                .tokens(["Earlier", " answer", " stays."]),
-                .tokens(["Original", " target", " answer."]),
-                .tokens(["Later", " answer", " to", " discard."]),
-                .tokens(["Replacement", " target", " answer."]),
             ]
         }
         return [
