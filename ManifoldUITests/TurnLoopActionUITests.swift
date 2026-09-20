@@ -87,7 +87,7 @@ final class TurnLoopActionUITests: XCTestCase {
 
         let editor = app.textViews["message-edit-text-editor"]
         XCTAssertTrue(editor.waitForExistence(timeout: 5), "Edit must present the real message editor")
-        editor.tap()
+        clickOrTap(editor)
         editor.typeKey("a", modifierFlags: .command)
         editor.typeText(editedPrompt)
 
@@ -96,7 +96,7 @@ final class TurnLoopActionUITests: XCTestCase {
             save.waitForExistence(timeout: 3) && save.isEnabled,
             "The non-empty edited prompt must enable the real Save action"
         )
-        save.tap()
+        clickOrTap(save)
 
         XCTAssertTrue(
             waitForElementToDisappear(originalUser, timeout: 5),
@@ -172,7 +172,7 @@ final class TurnLoopActionUITests: XCTestCase {
             XCTFail("Send must be enabled for \(prompt)")
             return
         }
-        send.tap()
+        clickOrTap(send)
         let completed = waitForCompletedChatTurn(app: app, timeout: 10)
         if completed == nil {
             let hierarchy = XCTAttachment(string: app.debugDescription)
@@ -243,7 +243,7 @@ final class TurnLoopActionUITests: XCTestCase {
             ).firstMatch,
         ]
         for candidate in candidates where candidate.waitForExistence(timeout: 5) && candidate.isHittable {
-            candidate.tap()
+            clickOrTap(candidate)
             return true
         }
         return false
