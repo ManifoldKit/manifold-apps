@@ -98,6 +98,8 @@ targets:
         product: ManifoldUIModelManagement
       - package: ManifoldKit
         product: ManifoldAppIntents
+      - package: ManifoldKit
+        product: ManifoldMCP
       - package: ManifoldMLX
         product: ManifoldMLX
       - package: ManifoldLlama
@@ -168,6 +170,8 @@ targets:
     sources:
       - MacUITests
       - ManifoldUITests/UITestHelpers.swift
+    resources:
+      - path: MacUITests/Fixtures
     dependencies:
       - target: ManifoldMac
     settings:
