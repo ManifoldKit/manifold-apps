@@ -22,6 +22,7 @@ final class TurnLoopActionUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    @MainActor
     func testRegenerateReplacesOnlyTheTargetAssistantAnswer() throws {
         let app = launchTurnLoopActionApp(additionalArgument: "--turn-loop-regeneration-test")
         seedTwoCompletedTurns(in: app)
@@ -40,10 +41,12 @@ final class TurnLoopActionUITests: XCTestCase {
             "The real assistant-message action menu must offer Regenerate"
         )
 
+        let regenerated = waitForCompletedChatTurn(app: app, timeout: 10)
+        let statusAfterRegeneration = app.otherElements["chat-conversation"].value as? String ?? "<unavailable>"
         XCTAssertEqual(
-            waitForCompletedChatTurn(app: app, timeout: 10),
+            regenerated,
             "Response complete: \(replacementAnswer)",
-            "Regenerate must produce the fixture's distinct replacement answer"
+            "Regenerate must produce the fixture's distinct replacement answer. Status: \(statusAfterRegeneration)"
         )
         XCTAssertTrue(
             waitForElementToDisappear(originalAssistant, timeout: 5),
@@ -62,6 +65,7 @@ final class TurnLoopActionUITests: XCTestCase {
         assertEarlierTurnIsUntouched(in: app)
     }
 
+    @MainActor
     func testEditUserMessageRewritesAllDownstreamHistory() throws {
         let app = launchTurnLoopActionApp(additionalArgument: "--turn-loop-edit-test")
         seedTwoCompletedTurns(in: app)
@@ -102,10 +106,12 @@ final class TurnLoopActionUITests: XCTestCase {
             messageBubble(role: "User", containing: editedPrompt, in: app).waitForExistence(timeout: 5),
             "The edited user prompt must appear in the transcript"
         )
+        let editedResponse = waitForCompletedChatTurn(app: app, timeout: 10)
+        let statusAfterEdit = app.otherElements["chat-conversation"].value as? String ?? "<unavailable>"
         XCTAssertEqual(
-            waitForCompletedChatTurn(app: app, timeout: 10),
+            editedResponse,
             "Response complete: \(replacementAnswer)",
-            "Editing a user prompt must generate the fixture's downstream replacement answer"
+            "Editing a user prompt must generate the fixture's downstream replacement answer. Status: \(statusAfterEdit)"
         )
         XCTAssertEqual(
             messageBubbleCount(role: "User", containing: editedPrompt, in: app),
@@ -135,6 +141,7 @@ final class TurnLoopActionUITests: XCTestCase {
         assertEarlierTurnIsUntouched(in: app)
     }
 
+    @MainActor
     private func launchTurnLoopActionApp(additionalArgument: String) -> XCUIApplication {
         let app = launchApp(additionalArguments: [additionalArgument])
         openChatDetailIfNeeded(app: app)
@@ -145,11 +152,13 @@ final class TurnLoopActionUITests: XCTestCase {
         return app
     }
 
+    @MainActor
     private func seedTwoCompletedTurns(in app: XCUIApplication) {
         send(earlierPrompt, expecting: earlierAnswer, in: app)
         send(originalPrompt, expecting: originalAnswer, in: app)
     }
 
+    @MainActor
     private func send(_ prompt: String, expecting answer: String, in app: XCUIApplication) {
         guard let input = findMessageInput(app: app) else {
             XCTFail("Message input must exist before sending \(prompt)")
@@ -164,18 +173,28 @@ final class TurnLoopActionUITests: XCTestCase {
             return
         }
         send.tap()
+        let completed = waitForCompletedChatTurn(app: app, timeout: 10)
+        if completed == nil {
+            let hierarchy = XCTAttachment(string: app.debugDescription)
+            hierarchy.name = "Turn failed before completion"
+            hierarchy.lifetime = .keepAlways
+            add(hierarchy)
+        }
+        let statusAfterSend = app.otherElements["chat-conversation"].value as? String ?? "<unavailable>"
         XCTAssertEqual(
-            waitForCompletedChatTurn(app: app, timeout: 10),
+            completed,
             "Response complete: \(answer)",
-            "Sending \(prompt) must complete its deterministic turn"
+            "Sending \(prompt) must complete its deterministic turn. Status: \(statusAfterSend)"
         )
     }
 
+    @MainActor
     private func assertEarlierTurnIsUntouched(in app: XCUIApplication) {
         XCTAssertEqual(messageBubbleCount(role: "User", containing: earlierPrompt, in: app), 1)
         XCTAssertEqual(messageBubbleCount(role: "Assistant", containing: earlierAnswer, in: app), 1)
     }
 
+    @MainActor
     private func messageBubble(role: String, containing text: String, in app: XCUIApplication) -> XCUIElement {
         app.descendants(matching: .any).matching(
             NSPredicate(
@@ -186,6 +205,7 @@ final class TurnLoopActionUITests: XCTestCase {
         ).firstMatch
     }
 
+    @MainActor
     private func messageBubbleCount(role: String, containing text: String, in app: XCUIApplication) -> Int {
         app.descendants(matching: .any).matching(
             NSPredicate(
@@ -196,6 +216,7 @@ final class TurnLoopActionUITests: XCTestCase {
         ).count
     }
 
+    @MainActor
     private func openMessageContextMenu(_ element: XCUIElement) -> Bool {
         guard element.waitForExistence(timeout: 5), element.isHittable else { return false }
         #if os(macOS)
@@ -206,6 +227,7 @@ final class TurnLoopActionUITests: XCTestCase {
         return true
     }
 
+    @MainActor
     private func tapMessageContextMenuAction(
         identifier: String,
         label: String,
@@ -227,6 +249,7 @@ final class TurnLoopActionUITests: XCTestCase {
         return false
     }
 
+    @MainActor
     private func waitForElementToDisappear(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
         let expectation = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "exists == false"),

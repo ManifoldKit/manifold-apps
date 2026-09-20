@@ -31,7 +31,14 @@ final class TurnLoopActionTestBackend: InferenceBackend, Sendable {
     private static let laterAnswer = "Later answer to discard."
     private static let editedPrompt = "Use this edited prompt"
     private static let replacementAnswer = "Replacement target answer."
-    private static let unexpectedTurn = "Fixture error: unexpected prompt or conversation history."
+    private static func unexpectedTurn(
+        step: Int,
+        prompt: String,
+        history: [(role: String, content: String)]
+    ) -> String {
+        let transcript = history.map { "\($0.role):\($0.content)" }.joined(separator: " | ")
+        return "Fixture error at step \(step): prompt [\(prompt)], history [\(transcript)]."
+    }
 
     private let expectedTurns: [ExpectedTurn]
     private let state = OSAllocatedUnfairLock(initialState: State())
@@ -41,7 +48,10 @@ final class TurnLoopActionTestBackend: InferenceBackend, Sendable {
         maxContextTokens: 4096,
         requiresPromptTemplate: false,
         supportsSystemPrompt: true,
-        supportsToolCalling: false,
+        // The host advertises its reference tools even in these tests. The
+        // released queue rejects that request before generate() unless this
+        // backend accepts tool definitions, just like ScriptedBackend does.
+        supportsToolCalling: true,
         supportsStructuredOutput: false,
         cancellationStyle: .cooperative,
         supportsTokenCounting: false
@@ -119,9 +129,11 @@ final class TurnLoopActionTestBackend: InferenceBackend, Sendable {
     ) throws -> GenerationStream {
         let answer = state.withLock { state -> String in
             let turn = state.nextTurn
-            guard turn < expectedTurns.count else { return Self.unexpectedTurn }
-            let expected = expectedTurns[turn]
             let history = hints.history.map { (role: $0.role, content: $0.textContent) }
+            guard turn < expectedTurns.count else {
+                return Self.unexpectedTurn(step: turn + 1, prompt: prompt, history: history)
+            }
+            let expected = expectedTurns[turn]
             guard prompt == expected.prompt,
                   history.count == expected.history.count,
                   zip(history, expected.history).allSatisfy({ actual, wanted in
@@ -133,7 +145,7 @@ final class TurnLoopActionTestBackend: InferenceBackend, Sendable {
                           return false
                       }
                   }) else {
-                return Self.unexpectedTurn
+                return Self.unexpectedTurn(step: turn + 1, prompt: prompt, history: history)
             }
             state.nextTurn += 1
             return expected.answer
