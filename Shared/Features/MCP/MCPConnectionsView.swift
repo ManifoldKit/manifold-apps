@@ -168,6 +168,7 @@ struct MCPConnectionsView: View {
             .font(.caption)
         }
         .padding(.vertical, 4)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("mcp-service-row-\(descriptor.id.uuidString)")
     }
 
@@ -175,9 +176,12 @@ struct MCPConnectionsView: View {
         NavigationStack {
             Form {
                 TextField("Name", text: $draftName)
+                    .accessibilityLabel("Name")
                 TextField("Executable path", text: $draftExecutablePath)
+                    .accessibilityLabel("Executable path")
                 TextField("Arguments, one per line", text: $draftArguments, axis: .vertical)
                     .lineLimit(3...8)
+                    .accessibilityLabel("Arguments, one per line")
                 Text("Only an absolute executable path is accepted. Shells and command strings are rejected; each argument is passed as its own argv value.")
                     .font(.caption)
                     .foregroundStyle(.secondary)

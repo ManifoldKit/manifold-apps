@@ -255,7 +255,9 @@ final class MacMCPConnectionUITests: XCTestCase {
 
     @MainActor
     private func textElement(_ label: String) -> XCUIElement {
-        app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", label)).firstMatch
+        app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@ OR value == %@", label, label))
+            .firstMatch
     }
 
     @MainActor
