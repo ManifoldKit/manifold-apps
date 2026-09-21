@@ -139,6 +139,69 @@ enum LaunchArguments {
         isUITesting && CommandLine.arguments.contains("--appintent-tool-turn")
     }
 
+    /// Selects a separate preferences suite for a Mac MCP UI test. A malformed
+    /// ID fails startup rather than allowing a test to write production data.
+    static var mcpConfigurationTestStoreID: UUID? {
+        guard isUITesting,
+              let raw = ProcessInfo.processInfo.environment["MANIFOLD_MCP_CONFIG_TEST_STORE_ID"] else {
+            return nil
+        }
+        guard let id = UUID(uuidString: raw) else {
+            preconditionFailure("MANIFOLD_MCP_CONFIG_TEST_STORE_ID must be a UUID.")
+        }
+        return id
+    }
+
+    /// Seeds unreadable saved data only in an isolated MCP UI-test suite.
+    static var seedsMalformedMCPConfiguration: Bool {
+        isUITesting && mcpConfigurationTestStoreID != nil
+            && CommandLine.arguments.contains("--mcp-invalid-configuration-fixture")
+    }
+
+    /// Enables the bundled no-credential MCP stdio fixture only for macOS UI
+    /// tests. Production descriptors never read this environment value.
+    static var runsMCPConnectionFixture: Bool {
+        isUITesting && CommandLine.arguments.contains("--mcp-connection-fixture")
+    }
+
+    /// Selects the fixture's deliberate startup failure, proving unavailable
+    /// servers become a visible error rather than a silent disconnected state.
+    static var runsMCPConnectionFailureFixture: Bool {
+        runsMCPConnectionFixture && CommandLine.arguments.contains("--mcp-connection-fixture-failure")
+    }
+
+    /// Additional protocol/lifecycle modes are available only to the bundled
+    /// Mac UI-test fixture. Unknown values fail startup rather than weakening
+    /// a regression test into the normal success path.
+    static var mcpFixtureMode: String {
+        guard runsMCPConnectionFixture else { return "official-newline" }
+        if runsMCPConnectionFailureFixture { return "fail" }
+        let mode = ProcessInfo.processInfo.environment["MANIFOLD_MCP_FIXTURE_MODE"] ?? "official-newline"
+        precondition(
+            ["official-newline", "stall-initialize", "cancel-stall"].contains(mode),
+            "Unsupported MANIFOLD_MCP_FIXTURE_MODE."
+        )
+        return mode
+    }
+
+    static var mcpFixtureServerURL: URL? {
+        guard runsMCPConnectionFixture,
+              let path = ProcessInfo.processInfo.environment["MANIFOLD_MCP_FIXTURE_SERVER_PATH"],
+              path.hasPrefix("/") else { return nil }
+        let url = URL(fileURLWithPath: path)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
+    /// A test-owned file where the fixture records each process start. It is
+    /// only read under the explicit fixture flag to prove Retry launches a new
+    /// production stdio child rather than recycling UI state.
+    static var mcpFixtureAttemptLogURL: URL? {
+        guard runsMCPConnectionFixture,
+              let path = ProcessInfo.processInfo.environment["MANIFOLD_MCP_FIXTURE_ATTEMPT_LOG"],
+              path.hasPrefix("/") else { return nil }
+        return URL(fileURLWithPath: path)
+    }
+
     /// The value following `--scenario <id>`, if present. Reserved for the
     /// future `ScenariosFeature` (mirrors core's `--bck-demo-scenario`);
     /// unused until that feature is ported.

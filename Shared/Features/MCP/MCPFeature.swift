@@ -1,8 +1,7 @@
 import SwiftUI
 
-/// Stub — MCP client surface (manifold-apps W3 P4). macOS-only — see
-/// ``MacFeatureRegistry`` vs ``MobileFeatureRegistry``. A later worker
-/// replaces only `install(into:)`/`makeView(env:)` below.
+/// The macOS MCP connection surface. It deliberately manages only server
+/// connections and their lifecycle; chat tool execution is separate work.
 enum MCPFeature: AppFeature {
     static let id = "mcp"
     static let title = "MCP"
@@ -11,6 +10,10 @@ enum MCPFeature: AppFeature {
     static func install(into env: AppEnvironment) {}
 
     static func makeView(env: AppEnvironment) -> AnyView {
+        #if os(macOS) && !targetEnvironment(macCatalyst)
+        AnyView(MCPConnectionsView())
+        #else
         AnyView(NotYetPortedView(title: title))
+        #endif
     }
 }

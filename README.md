@@ -19,6 +19,20 @@ Both apps require OS 26 or newer to match the published ManifoldMLX 0.6.2
 platform floor. Builds use published release ranges; CI runs on macOS 26 with
 Xcode 26.6 and the iOS 26.5 simulator.
 
+### MCP connections
+
+The MCP feature lets a user add an explicitly consented local, no-credential
+stdio executable. OAuth-configured services need an app-registered redirect
+callback before a user can complete sign-in; remote HTTP configuration is also
+outside this connection-only slice. Connected MCP tools are not advertised to
+chat until the separate tool-execution integration ships.
+
+The published `ManifoldMCP` 0.78.0 stdio client does not yet interoperate with
+the official newline-delimited MCP stream, and its failed-session lifecycle
+does not provide the cleanup/events this surface needs. The connection UI keeps
+those failures visible and retryable, but a successful local-server claim and
+the corresponding lifecycle test remain blocked on the upstream fixes.
+
 ## Building
 
 Both targets consume ManifoldKit by published tag (`upToNextMinor`, see
