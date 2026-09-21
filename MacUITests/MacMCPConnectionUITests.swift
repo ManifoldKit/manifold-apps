@@ -57,7 +57,7 @@ final class MacMCPConnectionUITests: XCTestCase {
         let retry = app.descendants(matching: .any)["mcp-service-connect-\(fixtureServerID)"]
         XCTAssertTrue(retry.waitForExistence(timeout: 3) && retry.label == "Retry" && retry.isEnabled)
         XCTAssertTrue(waitForFixtureEvents(["start", "exit"], count: 1, at: attemptLogURL))
-        retry.tap()
+        retry.click()
         XCTAssertTrue(
             waitForFixtureEvents(["start", "exit"], count: 2, at: attemptLogURL),
             "Retry must launch a new local server process and each failed child must exit."
@@ -183,25 +183,25 @@ final class MacMCPConnectionUITests: XCTestCase {
         openMCPFeature()
         let addLocal = app.buttons["Add Local Server"]
         XCTAssertTrue(addLocal.waitForExistence(timeout: 3) && addLocal.isEnabled)
-        addLocal.tap()
+        addLocal.click()
 
         let name = app.textFields["Name"]
         let path = app.textFields["Executable path"]
         let add = app.buttons["Add"]
         XCTAssertTrue(name.waitForExistence(timeout: 3) && path.waitForExistence(timeout: 3))
-        name.tap()
+        name.click()
         name.typeText("Local fixture")
-        path.tap()
+        path.click()
         path.typeText("relative/server")
-        add.tap()
+        add.click()
         XCTAssertTrue(textElement("Enter an absolute executable path.").waitForExistence(timeout: 3))
 
         replaceText(in: path, with: "/bin/sh")
-        add.tap()
+        add.click()
         XCTAssertTrue(textElement("Shell executables are not allowed for MCP servers.").waitForExistence(timeout: 3))
 
         replaceText(in: path, with: "/usr/bin/python3")
-        add.tap()
+        add.click()
         XCTAssertTrue(textElement("Local fixture").waitForExistence(timeout: 3))
 
         app.terminate()
@@ -224,10 +224,10 @@ final class MacMCPConnectionUITests: XCTestCase {
 
         let reset = app.descendants(matching: .any)["mcp-reset-saved-servers"]
         XCTAssertTrue(reset.waitForExistence(timeout: 3) && reset.isHittable)
-        reset.tap()
+        reset.click()
         let confirm = app.descendants(matching: .any)["mcp-confirm-reset-saved-servers"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 3) && confirm.isHittable)
-        confirm.tap()
+        confirm.click()
         XCTAssertTrue(textElement("No local servers configured").waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["Add Local Server"].isEnabled)
 
@@ -260,7 +260,7 @@ final class MacMCPConnectionUITests: XCTestCase {
 
     @MainActor
     private func replaceText(in field: XCUIElement, with replacement: String) {
-        field.tap()
+        field.click()
         field.typeKey("a", modifierFlags: .command)
         field.typeText(replacement)
     }
@@ -301,7 +301,7 @@ final class MacMCPConnectionUITests: XCTestCase {
             app.typeKey("n", modifierFlags: .command)
         }
         XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 5))
-        app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.05)).tap()
+        app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.05)).click()
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 5))
     }
 
@@ -411,16 +411,16 @@ final class MacMCPConnectionUITests: XCTestCase {
     private func connect() {
         let button = app.descendants(matching: .any)["mcp-service-connect-\(fixtureServerID)"]
         XCTAssertTrue(button.waitForExistence(timeout: 3) && button.isHittable)
-        button.tap()
+        button.click()
         let consent = app.buttons["Connect"]
-        if consent.waitForExistence(timeout: 1), consent.isHittable { consent.tap() }
+        if consent.waitForExistence(timeout: 1), consent.isHittable { consent.click() }
     }
 
     @MainActor
     private func disconnect() {
         let button = app.descendants(matching: .any)["mcp-service-disconnect-\(fixtureServerID)"]
         XCTAssertTrue(button.waitForExistence(timeout: 3) && button.isHittable)
-        button.tap()
+        button.click()
     }
 
     @MainActor
