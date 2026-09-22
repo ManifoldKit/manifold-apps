@@ -136,6 +136,12 @@ final class AppEnvironment {
             } else if LaunchArguments.runsTurnLoopEditTest {
                 backend = TurnLoopActionTestBackend(flow: .edit)
                 backendName = "TurnLoopUITest"
+            } else if LaunchArguments.runsTurnLoopCancellationTest {
+                backend = TurnLoopActionTestBackend(flow: .cancel)
+                backendName = "TurnLoopUITest"
+            } else if LaunchArguments.runsTurnLoopBranchTest {
+                backend = TurnLoopActionTestBackend(flow: .branch)
+                backendName = "TurnLoopUITest"
             } else {
                 backend = ScriptedBackend(turns: uiTestTurns)
                 backendName = LaunchArguments.showsCloudToolCatalog
@@ -294,6 +300,21 @@ final class AppEnvironment {
             sessionManager = SessionManagerViewModel()
         }
         await sessionManager.configureAndLoad(bootstrap: bootstrap)
+
+        // Manual bootstrap owns the host side of branch navigation. The
+        // runtime persists the new session, then this callback refreshes and
+        // selects it; RootView's active-session observer performs the matching
+        // ChatViewModel switch without awaiting teardown on the event drain.
+        viewModel.resolveBranchOriginTitle = { [weak sessionManager] session in
+            await sessionManager?.branchOriginTitle(for: session)
+        }
+        viewModel.onSessionBranched = { [weak sessionManager] newSessionID in
+            guard let sessionManager else { return }
+            await sessionManager.loadSessions()
+            if let newSession = sessionManager.sessions.first(where: { $0.id == newSessionID }) {
+                sessionManager.activeSession = newSession
+            }
+        }
 
         if let restored = await sessionManager.selectInitialSession() {
             sessionManager.activeSession = restored
