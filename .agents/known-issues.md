@@ -202,6 +202,29 @@ run Mac UI tests on a macOS 26-or-newer runner. Both complete app builds passed
 on Xcode 27 after that alignment. The macOS 26 hosted image uses Xcode 26.6
 and an installed iPhone 17/iOS 26.5 simulator for the CI configuration.
 
+## Chat UI fixtures must accept the app's advertised tools
+
+New edit/regenerate UI tests failed on their first ordinary text turn, before
+reaching the actions. The fixture advertised `supportsToolCalling: false`,
+but `ToolsFeature` had installed the reference tool catalog and the unknown
+test backend identity received tool definitions. Released core 0.78.0 rejects
+that request in `GenerationQueue` before calling the backend. Match the
+existing `ScriptedBackend` capability (`supportsToolCalling: true`) while
+retaining exact prompt/history validation in the fixture. Live Mac checks then
+completed both regeneration and editing the middle of a three-turn conversation.
+Do not remove the production tool advertisement to make a chat fixture pass.
+
+## Xcode 27 simulator failure diagnostics can delay a completed test run
+
+A local iOS target had already reported all 55 results, but `xcodebuild` waited
+another 600 seconds for simulator diagnostic collection before exiting with
+its test failure. Its log reported a timeout collecting diagnostics from the
+simulator. For local failure/negative-control investigation, the documented
+`-collect-test-diagnostics never` option avoids that extra sysdiagnose wait;
+it does not skip tests or assertions. Keep the original test failure and full
+target result as the verdict. This was observed on local Xcode 27.0, not the
+hosted Xcode 26.6 runner.
+
 ## macOS XCTest tap can synthesize input without invoking an AppKit control
 
 On 2026-09-21 with Xcode 27/macOS 27, three complete Manifold Mac UI cases

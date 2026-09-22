@@ -130,6 +130,12 @@ final class AppEnvironment {
             if LaunchArguments.runsToolApprovalFlow {
                 backend = ToolApprovalTestBackend(root: ManifoldToolRoot.resolve())
                 backendName = BackendName.ollama.rawValue
+            } else if LaunchArguments.runsTurnLoopRegenerationTest {
+                backend = TurnLoopActionTestBackend(flow: .regenerate)
+                backendName = "TurnLoopUITest"
+            } else if LaunchArguments.runsTurnLoopEditTest {
+                backend = TurnLoopActionTestBackend(flow: .edit)
+                backendName = "TurnLoopUITest"
             } else {
                 backend = ScriptedBackend(turns: uiTestTurns)
                 backendName = LaunchArguments.showsCloudToolCatalog
@@ -373,11 +379,9 @@ final class AppEnvironment {
         }
     }
 
-    /// Deterministic scripted turns for `--uitesting` runs — enough for the
-    /// smoke suite's single send/receive round trip. `ScriptedBackend`
-    /// returns an empty terminal turn once these are exhausted, which the
-    /// turn loop treats as "no more tool calls, stop" rather than an error,
-    /// so running out mid-session is harmless.
+    /// Default deterministic turns for ordinary `--uitesting` runs. The
+    /// edit/regenerate flows use a separate backend that validates the actual
+    /// prompt and history before returning their distinct responses.
     private static var uiTestTurns: [ScriptedBackend.Turn] {
         if LaunchArguments.runsAppIntentToolTurn {
             return [
