@@ -34,6 +34,12 @@ make test                 # runs the complete iOS + macOS UI-test targets
 See `AGENTS.md` for the full set of repo-specific conventions and
 constraints.
 
+## ManifoldKit compatibility canary
+
+The optional [core compatibility canary](docs/core-canary.md) builds this app
+against an exact ManifoldKit checkout while leaving product builds on their
+published dependency pins.
+
 ## Manifold Studio direction
 
 The planned **Manifold Studio** is a separate SwiftPM server daemon and browser
