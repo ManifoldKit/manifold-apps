@@ -152,6 +152,17 @@ enum LaunchArguments {
         isUITesting && CommandLine.arguments.contains("--turn-loop-edit-test")
     }
 
+    /// Selects the controllably suspended backend used to prove that Stop
+    /// cancels an active turn and leaves inference ready for the next send.
+    static var runsTurnLoopCancellationTest: Bool {
+        isUITesting && CommandLine.arguments.contains("--turn-loop-cancellation-test")
+    }
+
+    /// Selects history-aware responses for the branch-isolation UI flow.
+    static var runsTurnLoopBranchTest: Bool {
+        isUITesting && CommandLine.arguments.contains("--turn-loop-branch-test")
+    }
+
     /// The value following `--scenario <id>`, if present. Reserved for the
     /// future `ScenariosFeature` (mirrors core's `--bck-demo-scenario`);
     /// unused until that feature is ported.
