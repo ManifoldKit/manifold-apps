@@ -214,6 +214,18 @@ retaining exact prompt/history validation in the fixture. Live Mac checks then
 completed both regeneration and editing the middle of a three-turn conversation.
 Do not remove the production tool advertisement to make a chat fixture pass.
 
+## Held test streams need a batching-sized visible prefix
+
+On 2026-09-22, a deterministic cancellation fixture yielded a short prefix but
+the UI never exposed that partial answer or its Stop control. ManifoldKit 0.79.0's
+turn-stream finalizer batches appended text until it reaches 128 characters (or
+another append or stream termination flushes it); a deliberately held stream
+therefore kept the short prefix buffered forever. Yield at least one batching-sized
+prefix before holding the stream (154 characters in the cancellation fixture),
+then keep the producer open until the real cancellation callback observes terminal
+delivery. Do not add a timer or natural stream end, which can make recovery pass
+without proving cancellation drained the producer.
+
 ## Xcode 27 simulator failure diagnostics can delay a completed test run
 
 A local iOS target had already reported all 55 results, but `xcodebuild` waited
