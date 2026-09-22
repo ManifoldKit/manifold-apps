@@ -2,9 +2,9 @@ name: Manifold
 options:
   bundleIdPrefix: com.manifoldkit
   deploymentTarget:
-    iOS: "18.0"
-    macOS: "15.0"
-  xcodeVersion: "16.0"
+    iOS: "26.0"
+    macOS: "26.0"
+  xcodeVersion: "26.0"
   generateEmptyDirectories: true
 
 packages:
@@ -15,10 +15,10 @@ packages:
   # repointing at a branch or a local path.
   ManifoldKit:
     url: https://github.com/ManifoldKit/ManifoldKit
-    minorVersion: 0.78.0
+    minorVersion: 0.79.0
   ManifoldMLX:
     url: https://github.com/ManifoldKit/manifold-mlx
-    minorVersion: 0.6.0
+    minorVersion: 0.6.2
   ManifoldLlama:
     url: https://github.com/ManifoldKit/manifold-llama
     minorVersion: 0.4.6

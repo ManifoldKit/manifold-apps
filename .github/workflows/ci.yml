@@ -14,15 +14,19 @@ jobs:
   test:
     uses: ManifoldKit/.github/.github/workflows/swift-ci.yml@main
     with:
+      runner: '"macos-26"'
+      xcode-version: "26.6"
       mode: xcodegen
       project: Manifold.xcodeproj
       scheme: Manifold
-      destination: "platform=iOS Simulator,name=iPhone 16"
+      destination: "platform=iOS Simulator,name=iPhone 17,OS=26.5"
       run-tests: true
 
   macos:
     uses: ManifoldKit/.github/.github/workflows/swift-ci.yml@main
     with:
+      runner: '"macos-26"'
+      xcode-version: "26.6"
       mode: xcodegen
       project: Manifold.xcodeproj
       scheme: ManifoldMac

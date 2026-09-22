@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData // needed for .modelContainer modifier type inference
 import ManifoldKit
 
-/// Manifold — the consumer chat app (iOS 18+).
+/// Manifold — the consumer chat app (iOS 26+).
 ///
 /// Builds the shared `AppEnvironment` composition root and shows
 /// `RootView`. Under `--uitesting`, `AppEnvironment.bootstrap` swaps in a
