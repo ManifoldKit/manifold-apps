@@ -13,6 +13,7 @@ final class ToolApprovalTestBackend: InferenceBackend, Sendable {
     static let requestedPath = "approval/result.txt"
     static let requestedContents = "approved through the live UI gate"
     static let successMessage = "Tool result history and exact file bytes verified."
+    static let refusedMessage = "Disabled sample tool refused; no file was written."
 
     private struct State: Sendable {
         var isModelLoaded = true
@@ -25,6 +26,7 @@ final class ToolApprovalTestBackend: InferenceBackend, Sendable {
     }
 
     private let root: URL
+    private let forceUnadvertisedCall: Bool
     private let state = OSAllocatedUnfairLock(initialState: State())
 
     let capabilities = BackendCapabilities(
@@ -38,8 +40,9 @@ final class ToolApprovalTestBackend: InferenceBackend, Sendable {
         supportsTokenCounting: false
     )
 
-    init(root: URL) {
+    init(root: URL, forceUnadvertisedCall: Bool = false) {
         self.root = root
+        self.forceUnadvertisedCall = forceUnadvertisedCall
     }
 
     var isModelLoaded: Bool {
@@ -90,7 +93,9 @@ final class ToolApprovalTestBackend: InferenceBackend, Sendable {
         config: GenerationConfig,
         history: [StructuredMessage]
     ) -> [GenerationEvent] {
-        let writeCalls = history.flatMap(\.parts).compactMap { part -> ToolCall? in
+        let turnStart = history.lastIndex(where: { $0.role == "user" }) ?? history.startIndex
+        let currentTurn = Array(history[turnStart...])
+        let writeCalls = currentTurn.flatMap(\.parts).compactMap { part -> ToolCall? in
             guard case .toolCall(let call) = part, call.toolName == "write_file" else {
                 return nil
             }
@@ -98,14 +103,26 @@ final class ToolApprovalTestBackend: InferenceBackend, Sendable {
         }
 
         guard let call = writeCalls.last else {
-            guard config.tools.contains(where: { $0.name == "write_file" }) else {
+            guard forceUnadvertisedCall || config.tools.contains(where: { $0.name == "write_file" }) else {
                 return Self.tokens("Tool validation failed: write_file was not advertised.")
             }
             let arguments = #"{"path":"\#(Self.requestedPath)","content":"\#(Self.requestedContents)"}"#
-            return [.toolCall(ToolCall(id: "approval-write-0", toolName: "write_file", arguments: arguments))]
+            return [.toolCall(ToolCall(id: "approval-write-\(history.filter { $0.role == "user" }.count)", toolName: "write_file", arguments: arguments))]
         }
 
-        guard validatesResultAndFile(for: call, history: history) else {
+        if forceUnadvertisedCall {
+            let result = currentTurn.flatMap(\.parts).compactMap { part -> ToolResult? in
+                guard case .toolResult(let result) = part, result.callId == call.id else { return nil }
+                return result
+            }.last
+            guard !config.tools.contains(where: { $0.name == "write_file" }),
+                  result?.errorKind == .unknownTool,
+                  !FileManager.default.fileExists(atPath: root.appendingPathComponent(Self.requestedPath).path) else {
+                return Self.tokens("Disabled tool validation failed: executor or advertisement remained active.")
+            }
+            return Self.tokens(Self.refusedMessage)
+        }
+        guard validatesResultAndFile(for: call, history: currentTurn) else {
             return Self.tokens("Tool validation failed: result history or file bytes were missing.")
         }
         return Self.tokens(Self.successMessage)

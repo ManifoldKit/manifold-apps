@@ -99,7 +99,12 @@ enum LaunchArguments {
     /// presentation used by `ToolsUITests`. Kept opt-in so the ordinary smoke
     /// tests retain their token-only scripted turns.
     static var runsToolApprovalFlow: Bool {
-        isUITesting && CommandLine.arguments.contains("--tool-approval-test")
+        isUITesting && (CommandLine.arguments.contains("--tool-approval-test") || runsDisabledToolCallTest)
+    }
+
+    /// Emits an unadvertised call to prove disabled sample tools cannot execute.
+    static var runsDisabledToolCallTest: Bool {
+        isUITesting && CommandLine.arguments.contains("--disabled-tool-call-test")
     }
 
     /// Gives the deterministic backend the published OpenAI Responses provider

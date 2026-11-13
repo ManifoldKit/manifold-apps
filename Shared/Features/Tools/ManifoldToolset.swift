@@ -77,7 +77,9 @@ enum ManifoldToolset {
         case .openAI, .openAIResponses, .claude, .custom:
             registry.advertisedToolNames = nil
         case .ollama, .lmStudio, nil:
-            registry.advertisedToolNames = localAdvertisedNames
+            let independentNames = Set(registry.definitions.map(\.name))
+                .subtracting(baselineNames)
+            registry.advertisedToolNames = localAdvertisedNames.union(independentNames)
         }
     }
 }

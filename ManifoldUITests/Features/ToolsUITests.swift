@@ -14,6 +14,8 @@ final class ToolsUITests: XCTestCase {
     func testApprovedWriteToolCompletesAndReturnsResult() throws {
         app = launchApp(additionalArguments: ["--tool-approval-test"])
         navigateToTools()
+        assertAdvertisement("0 of 0 tools advertised")
+        setSampleToolsEnabled(true)
 
         let advertisementSummary = app.descendants(matching: .any)["tool-advertisement-summary"]
         XCTAssertTrue(advertisementSummary.waitForExistence(timeout: 5))
@@ -97,6 +99,8 @@ final class ToolsUITests: XCTestCase {
     func testCloudBackendAdvertisesUsefulReferenceCatalogOnly() {
         app = launchApp(additionalArguments: ["--cloud-tool-catalog-test"])
         navigateToTools()
+        assertAdvertisement("0 of 0 tools advertised")
+        setSampleToolsEnabled(true)
 
         let advertisementSummary = app.descendants(matching: .any)["tool-advertisement-summary"]
         XCTAssertTrue(advertisementSummary.waitForExistence(timeout: 5))
@@ -113,6 +117,98 @@ final class ToolsUITests: XCTestCase {
             app.descendants(matching: .any)["tool-row-fakeMCPLookup"].exists,
             "Demo MCP-failure fixtures must not be advertised to cloud models or shown to users"
         )
+    }
+
+    func testSampleToolsAreOffAtLaunchAndRefuseForcedCalls() {
+        verifyDisabledToolRefusal(afterEnabling: false)
+    }
+
+    func testDisablingSampleToolsRemovesTheirExecutors() {
+        verifyDisabledToolRefusal(afterEnabling: true)
+    }
+
+    func testReenablingSampleToolsRequiresFreshApproval() {
+        app = launchApp(additionalArguments: ["--tool-approval-test"])
+        navigateToTools()
+        setSampleToolsEnabled(true)
+        navigateToChat()
+        sendWriteAndApprove()
+
+        navigateToTools()
+        setSampleToolsEnabled(false)
+        assertAdvertisement("0 of 0 tools advertised")
+        setSampleToolsEnabled(true)
+        navigateToChat()
+        // The default once-per-session policy must ask again after disabling.
+        sendWriteAndApprove()
+    }
+
+    private func verifyDisabledToolRefusal(afterEnabling: Bool) {
+        app = launchApp(additionalArguments: ["--disabled-tool-call-test"])
+        navigateToTools()
+        assertAdvertisement("0 of 0 tools advertised")
+        if afterEnabling {
+            setSampleToolsEnabled(true)
+            assertAdvertisement("5 of 6 tools advertised")
+            setSampleToolsEnabled(false)
+            assertAdvertisement("0 of 0 tools advertised")
+        }
+        navigateToChat()
+        sendPrompt("Attempt the disabled write tool")
+        let refused = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS %@", "Disabled sample tool refused; no file was written.")
+        ).firstMatch
+        XCTAssertTrue(refused.waitForExistence(timeout: 15),
+                      "The live dispatch must return unknownTool and leave the filesystem untouched")
+        XCTAssertFalse(app.descendants(matching: .any)["approval-sheet-title"].exists,
+                       "An unregistered sample tool must not request approval")
+    }
+
+    private func sendWriteAndApprove() {
+        let replies = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS %@", "Tool result history and exact file bytes verified.")
+        )
+        let previousReplies = replies.count
+        sendPrompt("Write another approval result file")
+        let approval = app.descendants(matching: .any)["approval-sheet-title"]
+        XCTAssertTrue(approval.waitForExistence(timeout: 10), "A fresh explicit approval is required")
+        app.buttons["approval-sheet-approve-button"].tap()
+        let completed = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                replies.count > previousReplies && !self.app.buttons["Stop generation"].exists
+            }, object: nil
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [completed], timeout: 15), .completed,
+                       "The new turn must finish with verified result history and file bytes")
+    }
+
+    private func sendPrompt(_ prompt: String) {
+        guard let input = findMessageInput(app: app) else {
+            XCTFail("Message input should be available")
+            return
+        }
+        tapMessageEditingArea(input)
+        input.typeText(prompt)
+        let send = app.buttons["Send message"]
+        XCTAssertTrue(send.waitForExistence(timeout: 5) && send.isEnabled)
+        send.tap()
+    }
+
+    private func setSampleToolsEnabled(_ enabled: Bool) {
+        let toggle = app.switches["sample-tools-enabled-toggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5) && toggle.isHittable)
+        XCTAssertEqual(toggle.value as? String, enabled ? "0" : "1", "Toggle must start in the opposite state")
+        toggle.tap()
+        let changed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", enabled ? "1" : "0"), object: toggle
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [changed], timeout: 5), .completed)
+    }
+
+    private func assertAdvertisement(_ expected: String) {
+        let summary = app.descendants(matching: .any)["tool-advertisement-summary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 5))
+        XCTAssertEqual(summary.label, expected)
     }
 
     private func navigateToTools() {
