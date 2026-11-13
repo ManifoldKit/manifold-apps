@@ -250,3 +250,15 @@ switch using the row's normalized x=0.88 midpoint, then assert its changed value
 and live registry behavior. Do not replace the tap with launch-time opt-in or
 state injection; the default-off refusal case must still exercise production
 executor absence.
+
+## Real MLX runs can leave an unsigned metallib in the Mac build product
+
+Published manifold-mlx 0.6.3 stages its bundled `mlx.metallib` beside the running
+binary. After the first real-model run, a subsequent incremental Mac test build
+can fail CodeSign with `code object is not signed at all` for
+`Manifold.app/Contents/MacOS/mlx.metallib`. This is runtime-generated output in
+DerivedData, not an app source or package-resolution failure. Preserve the
+failed result, move only that staged file out of the task-owned build product,
+and rerun the complete unchanged gate so Xcode signs a clean app before launch.
+Do not disable signing or claim the failed invocation ran any tests. This is a
+local Debug workaround, not a Release/archive packaging qualification.
