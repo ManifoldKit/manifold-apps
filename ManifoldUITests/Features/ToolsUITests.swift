@@ -119,6 +119,32 @@ final class ToolsUITests: XCTestCase {
         )
     }
 
+    func testLateAppIntentRegistrationStaysAdvertisedWhenSamplesAreDisabled() {
+        app = launchApp()
+        navigateToTools()
+        setSampleToolsEnabled(true)
+        assertAdvertisement("5 of 6 tools advertised")
+
+        XCTAssertTrue(tapFeatureSidebarRow("appintents", app: app))
+        let register = app.buttons["appintent-tools-register-button"]
+        XCTAssertTrue(register.waitForExistence(timeout: 5) && register.isHittable)
+        register.tap()
+
+        navigateToTools()
+        assertAdvertisement("6 of 7 tools advertised")
+        let intent = app.descendants(matching: .any)["tool-row-set_reminder_intent"]
+        let browser = app.descendants(matching: .any)["tools-browser"]
+        for _ in 0..<4 where !intent.exists { browser.swipeUp() }
+        XCTAssertTrue(intent.waitForExistence(timeout: 3),
+                      "The live advertised definitions must include a later AppIntent registration")
+        let toggle = app.switches["sample-tools-enabled-toggle"]
+        for _ in 0..<4 where !toggle.isHittable { browser.swipeDown() }
+        setSampleToolsEnabled(false)
+        assertAdvertisement("1 of 1 tools advertised")
+        XCTAssertTrue(intent.waitForExistence(timeout: 3),
+                      "Removing sample executors must retain the independent AppIntent definition")
+    }
+
     func testSampleToolsAreOffAtLaunchAndRefuseForcedCalls() {
         verifyDisabledToolRefusal(afterEnabling: false)
     }
@@ -198,7 +224,9 @@ final class ToolsUITests: XCTestCase {
         let toggle = app.switches["sample-tools-enabled-toggle"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 5) && toggle.isHittable)
         XCTAssertEqual(toggle.value as? String, enabled ? "0" : "1", "Toggle must start in the opposite state")
-        toggle.tap()
+        // SwiftUI exposes the entire row as the identified Switch. The
+        // actual switch sits at its trailing edge; the row center is a label.
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.88, dy: 0.5)).tap()
         let changed = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "value == %@", enabled ? "1" : "0"), object: toggle
         )

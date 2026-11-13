@@ -124,6 +124,9 @@ struct AppIntentToolsView: View {
         }
         let executor = AppIntentToolExecutor(SetReminderIntent.self)
         toolRegistry.register(executor)
+        // A local-model catalog may already be curated by sample tools.
+        // Register this independent tool for discovery as well as dispatch.
+        toolRegistry.advertisedToolNames?.insert(executor.definition.name)
         refreshRegistrationStatus(expectedName: executor.definition.name)
         lastSchema = AppIntentToolsView.schemaPreview()
     }

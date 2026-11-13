@@ -238,3 +238,15 @@ reported two passes and the expected tap failure. Use `click()` for macOS
 XCUIElement and XCUICoordinate primary actions, preserving `tap()` for iOS
 through the shared `clickOrTap` helper. Keep the complete app UI targets as
 the gate: the probe diagnoses input delivery, not every app route.
+
+## SwiftUI Toggle accessibility can identify its whole list row
+
+On Xcode 27/iOS 27, the identified `sample-tools-enabled-toggle` Switch spans
+its 370-point list row, while the visible switch is a separate 63-point control
+at the trailing edge. `tap()` on the identified element's center synthesizes
+an event on the label and leaves its value at zero. The failure hierarchy and
+screen recording confirmed the geometry. UI tests tap the actual trailing
+switch using the row's normalized x=0.88 midpoint, then assert its changed value
+and live registry behavior. Do not replace the tap with launch-time opt-in or
+state injection; the default-off refusal case must still exercise production
+executor absence.
