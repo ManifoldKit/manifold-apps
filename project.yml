@@ -169,6 +169,7 @@ targets:
       - MacUITests
       - ManifoldUITests/UITestHelpers.swift
       - ManifoldUITests/TurnLoopActionUITests.swift
+      - ManifoldUITests/CancelAndBranchUITests.swift
     dependencies:
       - target: ManifoldMac
     settings:
