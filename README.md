@@ -6,6 +6,11 @@ adopter would build it: by consuming
 from published tags, not local checkouts. ManifoldKit is the product; this app
 is executable documentation.
 
+Sample tools are off at launch. Open **Tools → Enable sample tools** to try the
+reference tool catalog during the current app session. Turning it off removes
+those executors and clears remembered approvals; separately registered
+AppIntent tools remain available.
+
 ## Manifold (iOS)
 
 The consumer chat app — a single-session `ChatView` wired up with

@@ -90,9 +90,12 @@ directory, pass their validated byte sizes across the XCTest launch boundary,
 and let the companion backend perform the authoritative format check when the
 model is selected. Also do not treat the first non-empty assistant accessibility
 node as turn completion: a tool-call placeholder can appear while generation
-is still waiting for approval. The real gate must observe `Stop generation`
-appear and then disappear, and fail if the approval sheet appears before that
-terminal state. A missing `xcrun --find metallib` result is not an app-build
+is still waiting for approval. Require a new non-empty assistant reply,
+absence of `Stop generation`, and the idle `Regenerate last response` control;
+reject approval sheets, tool-invocation rows, turn failures, and error banners.
+Do not require observing Stop appear: a real four-token MLX answer can complete
+before XCTest's first snapshot, leaving a correct reply that the old transient
+state check falsely failed. A missing `xcrun --find metallib` result is not an app-build
 preflight; Xcode's package plugins can still compile and bundle the required
 Metal libraries, so the real load is the authoritative check.
 
@@ -238,3 +241,27 @@ reported two passes and the expected tap failure. Use `click()` for macOS
 XCUIElement and XCUICoordinate primary actions, preserving `tap()` for iOS
 through the shared `clickOrTap` helper. Keep the complete app UI targets as
 the gate: the probe diagnoses input delivery, not every app route.
+
+## SwiftUI Toggle accessibility can identify its whole list row
+
+On Xcode 27/iOS 27, the identified `sample-tools-enabled-toggle` Switch spans
+its 370-point list row, while the visible switch is a separate 63-point control
+at the trailing edge. `tap()` on the identified element's center synthesizes
+an event on the label and leaves its value at zero. The failure hierarchy and
+screen recording confirmed the geometry. UI tests tap the actual trailing
+switch using the row's normalized x=0.88 midpoint, then assert its changed value
+and live registry behavior. Do not replace the tap with launch-time opt-in or
+state injection; the default-off refusal case must still exercise production
+executor absence.
+
+## Real MLX runs can leave an unsigned metallib in the Mac build product
+
+Published manifold-mlx 0.6.3 stages its bundled `mlx.metallib` beside the running
+binary. After the first real-model run, a subsequent incremental Mac test build
+can fail CodeSign with `code object is not signed at all` for
+`Manifold.app/Contents/MacOS/mlx.metallib`. This is runtime-generated output in
+DerivedData, not an app source or package-resolution failure. Preserve the
+failed result, move only that staged file out of the task-owned build product,
+and rerun the complete unchanged gate so Xcode signs a clean app before launch.
+Do not disable signing or claim the failed invocation ran any tests. This is a
+local Debug workaround, not a Release/archive packaging qualification.

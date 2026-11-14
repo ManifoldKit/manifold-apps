@@ -13,6 +13,7 @@ struct ToolsBrowserView: View {
         // Establish Observation tracking for model/backend switches; the
         // registry itself is MainActor-isolated rather than @Observable.
         let _ = env.viewModel.activeBackendName
+        let _ = env.sampleToolsEnabled
         let advertised = env.toolRegistry.advertisedDefinitions
         let registered = env.toolRegistry.definitions
         let hidden = registered.filter { definition in
@@ -20,6 +21,17 @@ struct ToolsBrowserView: View {
         }
 
         List {
+            Section {
+                Toggle("Enable sample tools", isOn: Binding(
+                    get: { env.sampleToolsEnabled },
+                    set: { ToolsFeature.setSampleToolsEnabled($0, in: env) }
+                ))
+                .disabled(env.viewModel.isGenerating)
+                .accessibilityIdentifier("sample-tools-enabled-toggle")
+            } footer: {
+                Text("Sample tools are off at launch. Enable them to try tool calling in this app session. Turn them off to remove their executors and clear remembered approvals. Wait for the current response to finish before changing this setting.")
+            }
+
             Section("Approval") {
                 Button {
                     isPolicyPresented = true
@@ -45,7 +57,7 @@ struct ToolsBrowserView: View {
             } header: {
                 Text("Advertised tools")
             } footer: {
-                Text("Local and unknown backends receive a curated maximum of five definitions. Known cloud backends receive the full reference catalog.")
+                Text("When enabled, local and unknown backends receive five sample tools; known cloud backends receive all six. Tools registered separately through App Intents remain available.")
             }
 
             if !hidden.isEmpty {

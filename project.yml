@@ -15,13 +15,13 @@ packages:
   # repointing at a branch or a local path.
   ManifoldKit:
     url: https://github.com/ManifoldKit/ManifoldKit
-    minorVersion: 0.79.0
+    minorVersion: 0.80.0
   ManifoldMLX:
     url: https://github.com/ManifoldKit/manifold-mlx
-    minorVersion: 0.6.2
+    minorVersion: 0.6.4
   ManifoldLlama:
     url: https://github.com/ManifoldKit/manifold-llama
-    minorVersion: 0.4.6
+    minorVersion: 0.4.10
 
 targets:
   Manifold:

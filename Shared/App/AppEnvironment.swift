@@ -39,6 +39,7 @@ final class AppEnvironment {
     let toolApprovalGate: UIToolApprovalGate
     let backgroundIntentHandlerConfiguredAtStartup: Bool
     var themePreset: ThemingPreset = .standard
+    var sampleToolsEnabled = false
 
     var theme: ManifoldTheme {
         themePreset.theme
@@ -128,7 +129,10 @@ final class AppEnvironment {
             let backend: any InferenceBackend
             let backendName: String
             if LaunchArguments.runsToolApprovalFlow {
-                backend = ToolApprovalTestBackend(root: ManifoldToolRoot.resolve())
+                backend = ToolApprovalTestBackend(
+                    root: ManifoldToolRoot.resolve(),
+                    forceUnadvertisedCall: LaunchArguments.runsDisabledToolCallTest
+                )
                 backendName = BackendName.ollama.rawValue
             } else if LaunchArguments.runsTurnLoopRegenerationTest {
                 backend = TurnLoopActionTestBackend(flow: .regenerate)
