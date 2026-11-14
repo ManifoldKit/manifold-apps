@@ -119,8 +119,8 @@ final class MacRealModelUITests: XCTestCase {
         sendButton.click()
 
         XCTAssertTrue(
-            waitForGenerationToStartAndFinishWithoutApproval(timeout: 180),
-            "The real \(backend) turn should finish without requesting an arbitrary tool call"
+            waitForCompletedReplyWithoutTools(afterCount: assistantCountBefore, timeout: 180),
+            "The real \(backend) turn must add a completed reply without tool calls or errors"
         )
 
         XCTAssertTrue(
@@ -153,20 +153,38 @@ final class MacRealModelUITests: XCTestCase {
     }
 
     @MainActor
-    private func waitForGenerationToStartAndFinishWithoutApproval(timeout: TimeInterval) -> Bool {
+    private func waitForCompletedReplyWithoutTools(afterCount count: Int, timeout: TimeInterval) -> Bool {
         let stop = app.buttons["Stop generation"]
-        guard stop.waitForExistence(timeout: 30) else { return false }
+        let regenerate = app.buttons["Regenerate last response"]
         let approval = app.descendants(matching: .any)["approval-sheet-title"]
+        let failure = app.descendants(matching: .any)["turn-failure-card"]
+        let errorBanner = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label BEGINSWITH 'Error:'")
+        ).firstMatch
+        let toolInvocation = app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier BEGINSWITH 'tool-invocation-'")
+        ).firstMatch
+        let hasFailure = {
+            approval.exists || failure.exists || errorBanner.exists || toolInvocation.exists
+        }
         let terminal = XCTNSPredicateExpectation(
-            predicate: NSPredicate { _, _ in
-                approval.exists || !stop.exists
+            predicate: NSPredicate { [weak self] _, _ in
+                guard let self else { return false }
+                if hasFailure() { return true }
+                let bubbles = self.assistantBubbles()
+                guard bubbles.count > count, let newest = bubbles.last else { return false }
+                let prefix = "Assistant said:"
+                let label = newest.label.trimmingCharacters(in: .whitespacesAndNewlines)
+                // A short answer can finish before XCTest observes Stop.
+                // Regenerate is rendered only when generation is idle and
+                // the last transcript message is an assistant response.
+                return label.hasPrefix(prefix) && label.count > prefix.count
+                    && !stop.exists && regenerate.exists && regenerate.isEnabled
             },
             object: nil
         )
-        guard XCTWaiter.wait(for: [terminal], timeout: timeout) == .completed else {
-            return false
-        }
-        return !approval.exists && !stop.exists
+        guard XCTWaiter.wait(for: [terminal], timeout: timeout) == .completed else { return false }
+        return !hasFailure() && !stop.exists
     }
 
     @MainActor

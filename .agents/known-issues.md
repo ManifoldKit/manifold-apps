@@ -90,9 +90,12 @@ directory, pass their validated byte sizes across the XCTest launch boundary,
 and let the companion backend perform the authoritative format check when the
 model is selected. Also do not treat the first non-empty assistant accessibility
 node as turn completion: a tool-call placeholder can appear while generation
-is still waiting for approval. The real gate must observe `Stop generation`
-appear and then disappear, and fail if the approval sheet appears before that
-terminal state. A missing `xcrun --find metallib` result is not an app-build
+is still waiting for approval. Require a new non-empty assistant reply,
+absence of `Stop generation`, and the idle `Regenerate last response` control;
+reject approval sheets, tool-invocation rows, turn failures, and error banners.
+Do not require observing Stop appear: a real four-token MLX answer can complete
+before XCTest's first snapshot, leaving a correct reply that the old transient
+state check falsely failed. A missing `xcrun --find metallib` result is not an app-build
 preflight; Xcode's package plugins can still compile and bundle the required
 Metal libraries, so the real load is the authoritative check.
 
