@@ -80,6 +80,18 @@ build settings and entitlement intermediate; exercise the store/read/buffer
 logic in-process on the simulator, and do not describe that test as
 cross-process App Group proof.
 
+## Mac UI test startup can wait for authorization
+
+On macOS 27.0.1 with Xcode 27.2, the **Enable UI Automation** authentication
+panel opened even though the desktop was unlocked and developer tools were
+enabled. When authentication remained pending, XCTest timed out after 60
+seconds while enabling automation mode. No test cases or model generations
+started, even though the app built successfully.
+
+Run the full Mac suite from an unlocked desktop session with someone present
+to complete the system prompt. Afterward, inspect the test result bundle for
+executed cases, including the opt-in real-model case for `make mac-real-models`.
+
 ## Manifold Mac real-model UI tests must stage models outside Documents and await a terminal turn
 
 A macOS XCUITest app can remain on its loading screen while the main actor is

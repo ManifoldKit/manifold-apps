@@ -46,6 +46,13 @@ generates one replacement downstream reply. The fixture keeps an earlier
 completed exchange so the assertions also prove that unrelated history stays
 intact.
 
+Run `make mac-real-models` on an Apple silicon Mac to include the real MLX
+and GGUF model test. For this gate or the macOS portion of `make test`, keep
+the desktop unlocked and complete the system's **Enable UI Automation**
+prompt if it appears. See
+[Mac UI test startup troubleshooting](.agents/known-issues.md#mac-ui-test-startup-can-wait-for-authorization)
+if XCTest times out before the cases start.
+
 ## ManifoldKit compatibility canary
 
 The optional [core compatibility canary](docs/core-canary.md) builds this app
