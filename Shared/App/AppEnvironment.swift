@@ -140,6 +140,9 @@ final class AppEnvironment {
             } else if LaunchArguments.runsTurnLoopEditTest {
                 backend = TurnLoopActionTestBackend(flow: .edit)
                 backendName = "TurnLoopUITest"
+            } else if let mode = LaunchArguments.turnLoopStopMode {
+                backend = TurnLoopActionTestBackend(flow: .stop(mode))
+                backendName = "TurnLoopUITest"
             } else {
                 backend = ScriptedBackend(turns: uiTestTurns)
                 backendName = LaunchArguments.showsCloudToolCatalog

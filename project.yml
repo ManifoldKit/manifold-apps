@@ -18,10 +18,10 @@ packages:
     minorVersion: 0.80.0
   ManifoldMLX:
     url: https://github.com/ManifoldKit/manifold-mlx
-    minorVersion: 0.6.4
+    minorVersion: 0.6.5
   ManifoldLlama:
     url: https://github.com/ManifoldKit/manifold-llama
-    minorVersion: 0.4.10
+    minorVersion: 0.4.11
 
 targets:
   Manifold:

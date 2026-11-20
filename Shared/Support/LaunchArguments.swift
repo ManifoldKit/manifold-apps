@@ -157,6 +157,17 @@ enum LaunchArguments {
         isUITesting && CommandLine.arguments.contains("--turn-loop-edit-test")
     }
 
+    enum TurnLoopStopMode: String {
+        case beforeOutput = "before-output"
+        case afterPartialOutput = "after-partial-output"
+    }
+
+    /// Holds a scripted reply open until the real Stop action cancels it.
+    static var turnLoopStopMode: TurnLoopStopMode? {
+        guard isUITesting, let mode = value(after: "--turn-loop-stop-test") else { return nil }
+        return TurnLoopStopMode(rawValue: mode)
+    }
+
     /// The value following `--scenario <id>`, if present. Reserved for the
     /// future `ScenariosFeature` (mirrors core's `--bck-demo-scenario`);
     /// unused until that feature is ported.
