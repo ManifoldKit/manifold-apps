@@ -154,6 +154,11 @@ final class TurnLoopActionUITests: XCTestCase {
     private func verifyStop(mode: String, partial: String?) {
         let app = launchTurnLoopActionApp(additionalArguments: ["--turn-loop-stop-test", mode])
         send(earlierPrompt, expecting: earlierAnswer, in: app)
+        let regenerate = app.buttons["Regenerate last response"]
+        XCTAssertTrue(
+            regenerate.waitForExistence(timeout: 5) && regenerate.isEnabled,
+            "An earlier completed assistant reply should enable Regenerate"
+        )
         sendPrompt(interruptedPrompt, in: app)
 
         let stop = app.buttons["Stop generation"]
@@ -173,6 +178,21 @@ final class TurnLoopActionUITests: XCTestCase {
         XCTAssertTrue(waitForChatInputReady(app: app, timeout: 10))
         let remainingLabels = partial == nil ? previousLabels : previousLabels + [streamingReply]
         assertTranscript(remainingLabels, in: app)
+
+        // XCTest may omit an empty, idle bubble from its accessibility snapshot.
+        // The real Regenerate control also observes whether the last record
+        // is an assistant reply, even when its bubble has no visible content.
+        if partial == nil {
+            XCTAssertTrue(
+                waitForElementToDisappear(regenerate, timeout: 5),
+                "Any assistant record left by early Stop would still offer Regenerate"
+            )
+        } else {
+            XCTAssertTrue(
+                regenerate.waitForExistence(timeout: 5) && regenerate.isEnabled,
+                "A preserved partial reply should still offer Regenerate"
+            )
+        }
 
         send(followUpPrompt, expecting: followUpAnswer, in: app)
         assertTranscript(remainingLabels + [
