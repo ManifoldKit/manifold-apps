@@ -111,6 +111,16 @@ state check falsely failed. A missing `xcrun --find metallib` result is not an a
 preflight; Xcode's package plugins can still compile and bundle the required
 Metal libraries, so the real load is the authoritative check.
 
+## macOS XCTest caps long transcript labels
+
+The real-model Stop tests sent a 3,489-character prompt successfully on macOS
+27.0.1. The composer exposed the complete text, while each submitted message
+label contained exactly the first 512 characters of the expected label. Check
+the full composer value before sending. After submission, require one new
+transcript row with the exact label visible to XCTest and a cleared composer.
+For early Stop, check the receipt after cancelling so that the additional
+accessibility queries do not delay the Stop click.
+
 ## macOS can move the model-switcher toolbar chip into More overflow
 
 On a hosted arm64 runner, `chat-model-switcher-chip` can exist in the
