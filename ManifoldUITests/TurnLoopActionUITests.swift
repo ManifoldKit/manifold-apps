@@ -8,6 +8,7 @@ import XCTest
 /// message, and generates one new downstream assistant response. Each flow
 /// keeps an earlier completed exchange in the transcript to prove that the
 /// mutation is scoped to the selected turn rather than the whole session.
+/// Stop uses the composer control while the scripted reply is still open.
 final class TurnLoopActionUITests: XCTestCase {
     private let earlierPrompt = "Keep this earlier prompt"
     private let earlierAnswer = "Earlier answer stays."
@@ -17,6 +18,10 @@ final class TurnLoopActionUITests: XCTestCase {
     private let laterPrompt = "Discard this later prompt"
     private let laterAnswer = "Later answer to discard."
     private let replacementAnswer = "Replacement target answer."
+    private let interruptedPrompt = "Stop this reply"
+    private let partialAnswer = "This partial answer stays. The lighthouse keeper wrote that the lamp was lit and that the small boat had reached the harbor safely before nightfall."
+    private let followUpPrompt = "Reply in this same chat"
+    private let followUpAnswer = "The same chat still works."
 
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -24,7 +29,7 @@ final class TurnLoopActionUITests: XCTestCase {
 
     @MainActor
     func testRegenerateReplacesOnlyTheTargetAssistantAnswer() throws {
-        let app = launchTurnLoopActionApp(additionalArgument: "--turn-loop-regeneration-test")
+        let app = launchTurnLoopActionApp(additionalArguments: ["--turn-loop-regeneration-test"])
         seedTwoCompletedTurns(in: app)
 
         let originalAssistant = messageBubble(role: "Assistant", containing: originalAnswer, in: app)
@@ -64,7 +69,7 @@ final class TurnLoopActionUITests: XCTestCase {
 
     @MainActor
     func testEditUserMessageRewritesAllDownstreamHistory() throws {
-        let app = launchTurnLoopActionApp(additionalArgument: "--turn-loop-edit-test")
+        let app = launchTurnLoopActionApp(additionalArguments: ["--turn-loop-edit-test"])
         seedTwoCompletedTurns(in: app)
         send(laterPrompt, expecting: laterAnswer, in: app)
 
@@ -136,8 +141,92 @@ final class TurnLoopActionUITests: XCTestCase {
     }
 
     @MainActor
-    private func launchTurnLoopActionApp(additionalArgument: String) -> XCUIApplication {
-        let app = launchApp(additionalArguments: [additionalArgument])
+    func testStopBeforeOutputRemovesOnlyTheEmptyReply() {
+        verifyStop(mode: "before-output", partial: nil)
+    }
+
+    @MainActor
+    func testStopAfterPartialOutputPreservesTheReply() {
+        verifyStop(mode: "after-partial-output", partial: partialAnswer)
+    }
+
+    @MainActor
+    private func verifyStop(mode: String, partial: String?) {
+        let app = launchTurnLoopActionApp(additionalArguments: ["--turn-loop-stop-test", mode])
+        send(earlierPrompt, expecting: earlierAnswer, in: app)
+        let regenerate = app.buttons["Regenerate last response"]
+        XCTAssertTrue(
+            regenerate.waitForExistence(timeout: 5) && regenerate.isEnabled,
+            "An earlier completed assistant reply should enable Regenerate"
+        )
+        sendPrompt(interruptedPrompt, in: app)
+
+        let stop = app.buttons["Stop generation"]
+        XCTAssertTrue(stop.waitForExistence(timeout: 5) && stop.isHittable)
+        let previousLabels = [
+            "User said: \(earlierPrompt)",
+            "Assistant said: \(earlierAnswer)",
+            "User said: \(interruptedPrompt)",
+        ]
+        let streamingReply = "Assistant said: \(partial ?? "")"
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        assertTranscript(previousLabels + [streamingReply], in: app)
+        XCTAssertTrue(stop.exists, "The reply must still be held open when Stop is clicked")
+        clickOrTap(stop)
+
+        XCTAssertTrue(waitForElementToDisappear(stop, timeout: 5))
+        XCTAssertTrue(waitForChatInputReady(app: app, timeout: 10))
+        let remainingLabels = partial == nil ? previousLabels : previousLabels + [streamingReply]
+        assertTranscript(remainingLabels, in: app)
+
+        // XCTest may omit an empty, idle bubble from its accessibility snapshot.
+        // The real Regenerate control also observes whether the last record
+        // is an assistant reply, even when its bubble has no visible content.
+        if partial == nil {
+            XCTAssertTrue(
+                waitForElementToDisappear(regenerate, timeout: 5),
+                "Any assistant record left by early Stop would still offer Regenerate"
+            )
+        } else {
+            XCTAssertTrue(
+                regenerate.waitForExistence(timeout: 5) && regenerate.isEnabled,
+                "A preserved partial reply should still offer Regenerate"
+            )
+        }
+
+        send(followUpPrompt, expecting: followUpAnswer, in: app)
+        assertTranscript(remainingLabels + [
+            "User said: \(followUpPrompt)",
+            "Assistant said: \(followUpAnswer)",
+        ], in: app)
+    }
+
+    @MainActor
+    private func assertTranscript(
+        _ expected: [String],
+        in app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let bubbles = app.descendants(matching: .any).matching(NSPredicate(
+            format: "label BEGINSWITH 'User said:' OR label BEGINSWITH 'Assistant said:'"
+        ))
+        let readLabels = {
+            bubbles.allElementsBoundByIndex.map { $0.label.trimmingCharacters(in: .whitespacesAndNewlines) }
+        }
+        let matchingTranscript = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in readLabels() == expected },
+            object: nil
+        )
+        guard XCTWaiter.wait(for: [matchingTranscript], timeout: 10) == .completed else {
+            XCTAssertEqual(readLabels(), expected, "Unexpected chat transcript", file: file, line: line)
+            return
+        }
+    }
+
+    @MainActor
+    private func launchTurnLoopActionApp(additionalArguments: [String]) -> XCUIApplication {
+        let app = launchApp(additionalArguments: additionalArguments)
         openChatDetailIfNeeded(app: app)
         XCTAssertTrue(
             waitForChatInputReady(app: app, timeout: 30),
@@ -154,6 +243,15 @@ final class TurnLoopActionUITests: XCTestCase {
 
     @MainActor
     private func send(_ prompt: String, expecting answer: String, in app: XCUIApplication) {
+        sendPrompt(prompt, in: app)
+        XCTAssertTrue(
+            waitForExpectedAnswer(answer, in: app, timeout: 10),
+            "Sending \(prompt) must complete its deterministic turn with the fixture's exact answer."
+        )
+    }
+
+    @MainActor
+    private func sendPrompt(_ prompt: String, in app: XCUIApplication) {
         guard let input = findMessageInput(app: app) else {
             XCTFail("Message input must exist before sending \(prompt)")
             return
@@ -167,10 +265,6 @@ final class TurnLoopActionUITests: XCTestCase {
             return
         }
         clickOrTap(send)
-        XCTAssertTrue(
-            waitForExpectedAnswer(answer, in: app, timeout: 10),
-            "Sending \(prompt) must complete its deterministic turn with the fixture's exact answer."
-        )
     }
 
     @MainActor

@@ -46,6 +46,19 @@ generates one replacement downstream reply. The fixture keeps an earlier
 completed exchange so the assertions also prove that unrelated history stays
 intact.
 
+Run `make mac-real-models` on an Apple silicon Mac to exercise installed
+local models. Set `MANIFOLD_MAC_REAL_MLX_MODEL_PATH` to a Gemma 3 MLX model
+directory and `MANIFOLD_MAC_REAL_GGUF_MODEL_PATH` to a Llama 3.1 GGUF file for
+the Stop and image recall cases. The suite checks local model switching and
+whether Gemma can recall an image attached in an earlier turn or in the
+stopped turn. The Llama cases check early Stop, preservation of a partial
+reply, and sending the next message immediately in the same chat.
+
+For this gate or the macOS portion of `make test`, keep the desktop unlocked
+and complete the system's **Enable UI Automation** prompt if it appears. See
+[Mac UI test startup troubleshooting](.agents/known-issues.md#mac-ui-test-startup-can-wait-for-authorization)
+if XCTest times out before the cases start.
+
 ## ManifoldKit compatibility canary
 
 The optional [core compatibility canary](docs/core-canary.md) builds this app

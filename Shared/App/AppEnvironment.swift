@@ -140,6 +140,9 @@ final class AppEnvironment {
             } else if LaunchArguments.runsTurnLoopEditTest {
                 backend = TurnLoopActionTestBackend(flow: .edit)
                 backendName = "TurnLoopUITest"
+            } else if let mode = LaunchArguments.turnLoopStopMode {
+                backend = TurnLoopActionTestBackend(flow: .stop(mode))
+                backendName = "TurnLoopUITest"
             } else {
                 backend = ScriptedBackend(turns: uiTestTurns)
                 backendName = LaunchArguments.showsCloudToolCatalog
@@ -250,15 +253,10 @@ final class AppEnvironment {
         #endif
 
         if runsMacRealModelTest {
-            // The hardware gate validates the two paths before launch and
-            // injects their parsed production ModelInfo values directly. Do
-            // not scan the maintainer's entire model library on the main actor
-            // here: that work is unrelated to backend switching and can delay
-            // macOS accessibility registration long enough to prevent the UI
-            // gate from starting. Normal launches still exercise discovery in
-            // the `!isUITesting` startup branch below.
+            // Read only the staged models so the hardware gate uses the GGUF
+            // file's native template without scanning the normal model library.
             do {
-                let discovered = try Self.macRealModelInfos(
+                let discovered = try await Self.macRealModelInfos(
                     mlxURL: LaunchArguments.macRealMLXModelURL,
                     ggufURL: LaunchArguments.macRealGGUFModelURL,
                     mlxBytes: LaunchArguments.macRealMLXModelBytes,
@@ -266,8 +264,8 @@ final class AppEnvironment {
                 )
                 viewModel.modelRegistry.availableModels = discovered
             } catch {
-                viewModel.errorMessage = "Could not discover Manifold Mac real-test models: \(error.localizedDescription)"
                 Log.inference.error("Manifold Mac real-model discovery failed: \(String(describing: error), privacy: .public)")
+                throw error
             }
         } else if LaunchArguments.runsMacLocalModelTest {
             // The fixture lives only in the test registry; no files are created
@@ -425,53 +423,50 @@ final class AppEnvironment {
         ]
     }
 
-    /// Creates catalogue records for the two shell-validated hardware-gate
-    /// assets without parsing either model before RootView exists. The real
-    /// companion backends remain responsible for their authoritative format
-    /// and metadata checks when the user selects each row.
-    private static func macRealModelInfos(
+    /// Reads the staged GGUF header without blocking the main actor.
+    @concurrent
+    private nonisolated static func macRealModelInfos(
         mlxURL: URL,
         ggufURL: URL,
         mlxBytes: UInt64?,
         ggufBytes: UInt64?
-    ) throws -> [ModelInfo] {
+    ) async throws -> [ModelInfo] {
         guard let mlxBytes, let ggufBytes else {
             throw MacRealModelDiscoveryError.missingValidatedSizes
         }
         let mlx = ModelInfo(
-            name: Self.macRealDisplayName(for: mlxURL, stripsExtension: false),
+            name: mlxURL.lastPathComponent
+                .replacingOccurrences(of: "-", with: " ")
+                .replacingOccurrences(of: "_", with: " "),
             fileName: mlxURL.lastPathComponent,
             url: mlxURL,
             fileSize: mlxBytes,
             modelType: .mlx
         )
-        let gguf = ModelInfo(
-            name: Self.macRealDisplayName(for: ggufURL, stripsExtension: true),
-            fileName: ggufURL.lastPathComponent,
-            url: ggufURL,
-            fileSize: ggufBytes,
-            modelType: .gguf
-        )
+        let gguf = try ModelInfo.load(ggufURL: ggufURL)
+        guard gguf.fileSize == ggufBytes else {
+            throw MacRealModelDiscoveryError.unexpectedGGUFSize
+        }
+        guard let template = gguf.chatTemplateRaw, !template.isEmpty else {
+            throw MacRealModelDiscoveryError.missingGGUFChatTemplate
+        }
         return [mlx, gguf]
-    }
-
-    private static func macRealDisplayName(for url: URL, stripsExtension: Bool) -> String {
-        let rawName = stripsExtension
-            ? (url.lastPathComponent as NSString).deletingPathExtension
-            : url.lastPathComponent
-        return rawName
-            .replacingOccurrences(of: "-", with: " ")
-            .replacingOccurrences(of: "_", with: " ")
     }
 }
 
 private enum MacRealModelDiscoveryError: LocalizedError {
     case missingValidatedSizes
+    case unexpectedGGUFSize
+    case missingGGUFChatTemplate
 
     var errorDescription: String? {
         switch self {
         case .missingValidatedSizes:
             "The Manifold Mac real-model gate did not provide validated model byte sizes."
+        case .unexpectedGGUFSize:
+            "The staged GGUF size differs from the size validated by the Manifold Mac real-model gate."
+        case .missingGGUFChatTemplate:
+            "The staged GGUF did not provide a readable embedded chat template."
         }
     }
 }
