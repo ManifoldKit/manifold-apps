@@ -12,6 +12,8 @@ final class MacRealModelUITests: XCTestCase {
     private static let ggufPathEnvironmentKey = "MANIFOLD_MAC_REAL_GGUF_MODEL_PATH"
     private static let mlxBytesEnvironmentKey = "MANIFOLD_MAC_REAL_MLX_MODEL_BYTES"
     private static let ggufBytesEnvironmentKey = "MANIFOLD_MAC_REAL_GGUF_MODEL_BYTES"
+    private static let qwenPathEnvironmentKey = "MANIFOLD_MAC_REAL_QWEN_MODEL_PATH"
+    private static let qwenBytesEnvironmentKey = "MANIFOLD_MAC_REAL_QWEN_MODEL_BYTES"
     private static let defaultMLXModelPath = "~/Documents/Models/mlx/Qwen3.5-2B-4bit"
     private static let defaultGGUFModelPath = "~/Documents/Models/gguf/Qwen3.5-2B/Qwen_Qwen3.5-2B-Q4_K_M.gguf"
     private static let maximumEarlyStopAttempts = 2
@@ -26,7 +28,21 @@ final class MacRealModelUITests: XCTestCase {
     }
 
     private var ggufModelName: String {
-        displayName(for: realModelPath(for: Self.ggufPathEnvironmentKey, defaultPath: Self.defaultGGUFModelPath))
+        displayName(
+            for: realModelPath(for: Self.ggufPathEnvironmentKey, defaultPath: Self.defaultGGUFModelPath),
+            strippingExtension: true
+        )
+    }
+
+    @MainActor
+    private var qwenModelName: String {
+        get throws {
+            let path = try XCTUnwrap(
+                app.launchEnvironment[Self.qwenPathEnvironmentKey],
+                "Run make mac-real-models to stage the installed Qwen model"
+            )
+            return displayName(for: path)
+        }
     }
 
     override func setUpWithError() throws {
@@ -47,7 +63,9 @@ final class MacRealModelUITests: XCTestCase {
             Self.mlxPathEnvironmentKey,
             Self.ggufPathEnvironmentKey,
             Self.mlxBytesEnvironmentKey,
-            Self.ggufBytesEnvironmentKey
+            Self.ggufBytesEnvironmentKey,
+            Self.qwenPathEnvironmentKey,
+            Self.qwenBytesEnvironmentKey,
         ] {
             if let value = ProcessInfo.processInfo.environment[key] {
                 app.launchEnvironment[key] = value
@@ -66,6 +84,11 @@ final class MacRealModelUITests: XCTestCase {
             ggufModelName.localizedLowercase,
             "MLX and GGUF model rows must have distinct display identities"
         )
+        let composer = app.textFields["Message input"]
+        XCTAssertFalse(composer.exists && composer.isEnabled, "The isolated launch must start without a loaded model")
+        selectModel(try qwenModelName, backend: "mlx")
+        XCTAssertFalse(hasTurnFailure(), "The staged Qwen MLX model must load without errors")
+
         loadVerifyAndGenerate(
             model: mlxModelName,
             backend: "mlx",
@@ -583,13 +606,48 @@ final class MacRealModelUITests: XCTestCase {
     }
 
     @MainActor
+    private var modelSwitcherChips: XCUIElementQuery {
+        app.descendants(matching: .any).matching(identifier: "chat-model-switcher-chip")
+    }
+
+    @MainActor
     private func openModelSwitcher() {
-        let chip = app.descendants(matching: .any)["chat-model-switcher-chip"]
-        XCTAssertTrue(
-            chip.waitForExistence(timeout: 180) && chip.isHittable,
-            "Manifold Mac ChatView should expose its host-owned model switcher after real model discovery"
+        reachableModelSwitcherChip()?.element.click()
+    }
+
+    @MainActor
+    private func reachableModelSwitcherChip() -> (element: XCUIElement, openedOverflow: Bool)? {
+        let chips = modelSwitcherChips
+        // The label and composer can update before AppKit finishes laying
+        // out the new toolbar button and reports its hit target.
+        if let chip = firstHittable(in: chips, timeout: 5) {
+            return (chip, false)
+        }
+
+        // The principal toolbar item can move into macOS's More menu.
+        // Open the native menu and look for the same app-owned control.
+        let moreButtons = app.toolbars.buttons.matching(
+            NSPredicate(format: "label CONTAINS[c] 'More' OR value CONTAINS[c] 'More'")
         )
-        chip.click()
+        guard let more = firstHittable(in: moreButtons, timeout: 5) else {
+            XCTFail("The model switcher must be reachable in the toolbar or its More menu")
+            return nil
+        }
+        more.click()
+        guard let chip = firstHittable(in: chips, timeout: 5) else {
+            XCTFail("The More menu must expose the identified model switcher")
+            return nil
+        }
+        return (chip, true)
+    }
+
+    @MainActor
+    private func firstHittable(in query: XCUIElementQuery, timeout: TimeInterval) -> XCUIElement? {
+        let reachable = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            query.allElementsBoundByIndex.contains { $0.exists && $0.isHittable }
+        }, object: nil)
+        guard XCTWaiter.wait(for: [reachable], timeout: timeout) == .completed else { return nil }
+        return query.allElementsBoundByIndex.first { $0.exists && $0.isHittable }
     }
 
     @MainActor
@@ -631,19 +689,22 @@ final class MacRealModelUITests: XCTestCase {
 
     @MainActor
     private func assertSelectedModelChip(model: String, backend: String) {
-        let modelChip = app.descendants(matching: .any)["chat-model-switcher-chip"]
+        guard let reachability = reachableModelSwitcherChip() else { return }
+        defer {
+            if reachability.openedOverflow {
+                app.typeKey(.escape, modifierFlags: [])
+            }
+        }
+
+        // The clickable child and the node with the model label can share
+        // the chip identifier. Prove reachability and identity on each.
+        let modelChip = modelSwitcherChips.matching(
+            NSPredicate(format: "label CONTAINS[c] %@", model)
+        ).firstMatch
         XCTAssertTrue(
-            modelChip.waitForExistence(timeout: 15) && modelChip.isHittable,
-            "The model switcher chip should remain available after loading \(model)"
+            modelChip.waitForExistence(timeout: 15),
+            "The selected \(backend) model chip should identify \(model)"
         )
-        let chipLabel = modelChip.label
-        XCTAssertTrue(
-            chipLabel.localizedCaseInsensitiveContains(model),
-            "The selected model chip should identify \(model), got: \(chipLabel)"
-        )
-        // The model's registry identity selects the backend family; completion
-        // below then proves that this selected backend really generated a turn.
-        XCTAssertFalse(chipLabel.isEmpty, "The selected \(backend) model chip should have an accessible identity")
     }
 
     @MainActor
@@ -681,10 +742,10 @@ final class MacRealModelUITests: XCTestCase {
         return (rawPath as NSString).expandingTildeInPath
     }
 
-    private func displayName(for path: String) -> String {
+    private func displayName(for path: String, strippingExtension: Bool = false) -> String {
         let url = URL(fileURLWithPath: path)
         let rawName: String
-        if url.pathExtension.lowercased() == "gguf" {
+        if strippingExtension {
             rawName = (url.lastPathComponent as NSString).deletingPathExtension
         } else {
             // MLX directories legitimately contain dots in names such as
