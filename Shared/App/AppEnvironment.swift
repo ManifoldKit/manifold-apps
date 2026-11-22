@@ -259,8 +259,10 @@ final class AppEnvironment {
                 let discovered = try await Self.macRealModelInfos(
                     mlxURL: LaunchArguments.macRealMLXModelURL,
                     ggufURL: LaunchArguments.macRealGGUFModelURL,
+                    qwenURL: LaunchArguments.macRealQwenModelURL,
                     mlxBytes: LaunchArguments.macRealMLXModelBytes,
-                    ggufBytes: LaunchArguments.macRealGGUFModelBytes
+                    ggufBytes: LaunchArguments.macRealGGUFModelBytes,
+                    qwenBytes: LaunchArguments.macRealQwenModelBytes
                 )
                 viewModel.modelRegistry.availableModels = discovered
             } catch {
@@ -428,21 +430,17 @@ final class AppEnvironment {
     private nonisolated static func macRealModelInfos(
         mlxURL: URL,
         ggufURL: URL,
+        qwenURL: URL?,
         mlxBytes: UInt64?,
-        ggufBytes: UInt64?
+        ggufBytes: UInt64?,
+        qwenBytes: UInt64?
     ) async throws -> [ModelInfo] {
         guard let mlxBytes, let ggufBytes else {
             throw MacRealModelDiscoveryError.missingValidatedSizes
         }
-        let mlx = ModelInfo(
-            name: mlxURL.lastPathComponent
-                .replacingOccurrences(of: "-", with: " ")
-                .replacingOccurrences(of: "_", with: " "),
-            fileName: mlxURL.lastPathComponent,
-            url: mlxURL,
-            fileSize: mlxBytes,
-            modelType: .mlx
-        )
+        guard let qwenURL, let qwenBytes else {
+            throw MacRealModelDiscoveryError.missingQwenAsset
+        }
         let gguf = try ModelInfo.load(ggufURL: ggufURL)
         guard gguf.fileSize == ggufBytes else {
             throw MacRealModelDiscoveryError.unexpectedGGUFSize
@@ -450,12 +448,29 @@ final class AppEnvironment {
         guard let template = gguf.chatTemplateRaw, !template.isEmpty else {
             throw MacRealModelDiscoveryError.missingGGUFChatTemplate
         }
-        return [mlx, gguf]
+        return [
+            stagedMLXModelInfo(url: mlxURL, bytes: mlxBytes),
+            gguf,
+            stagedMLXModelInfo(url: qwenURL, bytes: qwenBytes),
+        ]
+    }
+
+    private nonisolated static func stagedMLXModelInfo(url: URL, bytes: UInt64) -> ModelInfo {
+        ModelInfo(
+            name: url.lastPathComponent
+                .replacingOccurrences(of: "-", with: " ")
+                .replacingOccurrences(of: "_", with: " "),
+            fileName: url.lastPathComponent,
+            url: url,
+            fileSize: bytes,
+            modelType: .mlx
+        )
     }
 }
 
 private enum MacRealModelDiscoveryError: LocalizedError {
     case missingValidatedSizes
+    case missingQwenAsset
     case unexpectedGGUFSize
     case missingGGUFChatTemplate
 
@@ -463,6 +478,8 @@ private enum MacRealModelDiscoveryError: LocalizedError {
         switch self {
         case .missingValidatedSizes:
             "The Manifold Mac real-model gate did not provide validated model byte sizes."
+        case .missingQwenAsset:
+            "The Manifold Mac real-model gate did not provide a staged Qwen model path and validated byte size."
         case .unexpectedGGUFSize:
             "The staged GGUF size differs from the size validated by the Manifold Mac real-model gate."
         case .missingGGUFChatTemplate:

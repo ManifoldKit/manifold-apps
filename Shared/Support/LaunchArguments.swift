@@ -35,7 +35,7 @@ enum LaunchArguments {
 
     /// Enables the opt-in Manifold Mac hardware gate. Unlike
     /// ``runsMacLocalModelTest``, this is deliberately a live inference
-    /// path: it discovers two installed model assets and lets the normal
+    /// path: it discovers staged model assets and lets the normal
     /// RootView selection dispatch load MLX and llama.cpp backends. It may be
     /// combined with `--uitesting` solely to get the ephemeral SwiftData store;
     /// it must never select the scripted backend or fixture catalogue.
@@ -76,6 +76,13 @@ enum LaunchArguments {
         )
     }
 
+    /// The distinct Qwen3.5 MLX directory staged by the hardware gate.
+    static var macRealQwenModelURL: URL? {
+        guard let path = ProcessInfo.processInfo.environment["MANIFOLD_MAC_REAL_QWEN_MODEL_PATH"],
+              !path.isEmpty else { return nil }
+        return URL(fileURLWithPath: path)
+    }
+
     /// Shell-validated weight bytes for the hardware-gate MLX directory.
     /// Passing this across the XCTest process boundary avoids enumerating a
     /// TCC-protected Documents directory during app bootstrap.
@@ -86,6 +93,11 @@ enum LaunchArguments {
     /// Shell-validated byte size for the hardware-gate GGUF file.
     static var macRealGGUFModelBytes: UInt64? {
         modelBytes(environmentKey: "MANIFOLD_MAC_REAL_GGUF_MODEL_BYTES")
+    }
+
+    /// Shell-validated weight bytes for the hardware-gate Qwen MLX directory.
+    static var macRealQwenModelBytes: UInt64? {
+        modelBytes(environmentKey: "MANIFOLD_MAC_REAL_QWEN_MODEL_BYTES")
     }
 
     /// Seeds ChatView's real API-key recovery banner for the endpoint-store
